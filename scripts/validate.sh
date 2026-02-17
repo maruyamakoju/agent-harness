@@ -110,21 +110,23 @@ echo "--- Environment ---"
 if [[ -f "$PROJECT_DIR/.env" ]]; then
     check_pass ".env file exists"
 
-    # Check required vars
-    for var in ANTHROPIC_API_KEY GITHUB_TOKEN; do
-        if grep -qE "^${var}=.+" "$PROJECT_DIR/.env"; then
-            # Check it's not the example value
-            local val
-            val=$(grep -E "^${var}=" "$PROJECT_DIR/.env" | cut -d= -f2)
-            if echo "$val" | grep -qE '(XXXX|your-|example|changeme)'; then
-                check_warn "$var is set but looks like a placeholder"
-            else
-                check_pass "$var is configured"
-            fi
+    # Check required vars (ANTHROPIC_API_KEY is optional with Max plan)
+    if grep -qE "^GITHUB_TOKEN=.+" "$PROJECT_DIR/.env"; then
+        VAL=$(grep -E "^GITHUB_TOKEN=" "$PROJECT_DIR/.env" | cut -d= -f2)
+        if echo "$VAL" | grep -qE '(XXXX|your-|example|changeme)'; then
+            check_warn "GITHUB_TOKEN is set but looks like a placeholder"
         else
-            check_fail "$var not set in .env"
+            check_pass "GITHUB_TOKEN is configured"
         fi
-    done
+    else
+        check_fail "GITHUB_TOKEN not set in .env"
+    fi
+
+    if grep -qE "^ANTHROPIC_API_KEY=.+" "$PROJECT_DIR/.env"; then
+        check_pass "ANTHROPIC_API_KEY is configured (API billing mode)"
+    else
+        check_warn "ANTHROPIC_API_KEY not set (OK if using Max plan with 'claude login')"
+    fi
 else
     check_fail ".env file missing (copy from .env.example)"
 fi
@@ -162,9 +164,8 @@ echo ""
 echo "--- GPU ---"
 
 if command -v nvidia-smi &>/dev/null; then
-    local gpu_name
-    gpu_name=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
-    check_pass "NVIDIA GPU detected: $gpu_name"
+    GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
+    check_pass "NVIDIA GPU detected: $GPU_NAME"
 
     if command -v nvidia-ctk &>/dev/null; then
         check_pass "NVIDIA Container Toolkit installed"
