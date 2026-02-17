@@ -372,7 +372,7 @@ invoke_claude() {
             "Bash(wc *)" "Bash(sort *)" "Bash(diff *)"
             "Bash(touch *)" "Bash(rm *)" "Bash(sed *)"
             "Bash(tee *)" "Bash(xargs *)"
-        --model claude-sonnet-4-5-20250929
+        --model "${DEFAULT_MODEL:-claude-sonnet-4-5-20250929}"
     )
 
     # Resume conversation if we have a session ID

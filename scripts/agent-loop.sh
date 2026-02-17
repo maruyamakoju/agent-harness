@@ -2,7 +2,9 @@
 # =============================================================================
 # agent-loop.sh - 24/7 Main Loop
 # Polls jobs/pending/ every 30s, dispatches to run-job.sh
-# Implements circuit breaker, heartbeat, and graceful shutdown
+# Implements circuit breaker, heartbeat, quota management, graceful shutdown
+#
+# Auth: Claude Max Plan ($200/mo) - quota-aware scheduling
 # =============================================================================
 set -euo pipefail
 
@@ -18,6 +20,13 @@ POLL_INTERVAL="${POLL_INTERVAL:-30}"
 CONSECUTIVE_FAILURES=0
 MAX_CONSECUTIVE_FAILURES=3
 CIRCUIT_BREAKER_PAUSE=600  # 10 minutes
+
+# Quota management (Max plan)
+MAX_JOBS_PER_DAY="${MAX_JOBS_PER_DAY:-20}"
+JOB_COOLDOWN="${JOB_COOLDOWN:-60}"  # seconds between jobs
+DAILY_JOB_COUNT=0
+DAILY_RESET_DATE=""
+QUOTA_COUNTER_FILE="${LOGS_DIR}/quota-counter.json"
 
 # Graceful shutdown
 RUNNING=true
@@ -62,12 +71,66 @@ update_heartbeat() {
         --argjson dn "$done" \
         --argjson fail "$failed" \
         --argjson consec_fail "$CONSECUTIVE_FAILURES" \
+        --argjson daily_jobs "$DAILY_JOB_COUNT" \
+        --argjson daily_max "$MAX_JOBS_PER_DAY" \
         '{
             timestamp: $ts,
             status: "alive",
+            auth: "max-plan",
             queue: {pending: $pend, running: $run, done: $dn, failed: $fail},
-            consecutive_failures: $consec_fail
+            consecutive_failures: $consec_fail,
+            quota: {jobs_today: $daily_jobs, max_per_day: $daily_max}
         }' > "$HEARTBEAT_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# Quota management
+# ---------------------------------------------------------------------------
+load_quota_counter() {
+    if [[ -f "$QUOTA_COUNTER_FILE" ]]; then
+        local saved_date
+        saved_date=$(jq -r '.date // ""' "$QUOTA_COUNTER_FILE" 2>/dev/null)
+        local today
+        today=$(date +%Y-%m-%d)
+        if [[ "$saved_date" == "$today" ]]; then
+            DAILY_JOB_COUNT=$(jq -r '.count // 0' "$QUOTA_COUNTER_FILE" 2>/dev/null)
+            DAILY_RESET_DATE="$today"
+        else
+            # New day, reset counter
+            DAILY_JOB_COUNT=0
+            DAILY_RESET_DATE="$today"
+            save_quota_counter
+        fi
+    else
+        DAILY_JOB_COUNT=0
+        DAILY_RESET_DATE=$(date +%Y-%m-%d)
+        save_quota_counter
+    fi
+}
+
+save_quota_counter() {
+    jq -n \
+        --arg date "$DAILY_RESET_DATE" \
+        --argjson count "$DAILY_JOB_COUNT" \
+        '{date: $date, count: $count}' > "$QUOTA_COUNTER_FILE"
+}
+
+check_daily_quota() {
+    # Reset counter if new day
+    local today
+    today=$(date +%Y-%m-%d)
+    if [[ "$today" != "$DAILY_RESET_DATE" ]]; then
+        DAILY_JOB_COUNT=0
+        DAILY_RESET_DATE="$today"
+        save_quota_counter
+        log_event "INFO" "QUOTA_RESET" "New day: daily job counter reset"
+    fi
+
+    # Check limit (0 = unlimited)
+    if [[ $MAX_JOBS_PER_DAY -gt 0 ]] && [[ $DAILY_JOB_COUNT -ge $MAX_JOBS_PER_DAY ]]; then
+        return 1  # quota exceeded
+    fi
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -80,6 +143,7 @@ shutdown_handler() {
         log_event "WARN" "SHUTDOWN" "Waiting for current job (PID $CURRENT_JOB_PID) to finish..."
         wait "$CURRENT_JOB_PID" 2>/dev/null || true
     fi
+    save_quota_counter
     log_event "INFO" "SHUTDOWN" "Agent loop stopped gracefully"
     exit 0
 }
@@ -90,7 +154,6 @@ trap shutdown_handler SIGTERM SIGINT SIGHUP
 # Pick oldest pending job
 # ---------------------------------------------------------------------------
 pick_next_job() {
-    # Sort by filename (timestamp-based) → oldest first
     local job_file
     job_file=$(find "$JOBS_DIR/pending" -name "*.json" -type f 2>/dev/null \
         | sort \
@@ -108,7 +171,7 @@ dispatch_job() {
     local job_basename
     job_basename=$(basename "$job_file")
 
-    log_event "INFO" "JOB_START" "id=$job_id file=$job_basename"
+    log_event "INFO" "JOB_START" "id=$job_id file=$job_basename daily_count=$((DAILY_JOB_COUNT+1))/$MAX_JOBS_PER_DAY"
     "$SCRIPTS_DIR/notify.sh" "job_start" "$job_id" "repo=$(jq -r '.repo // ""' "$job_file")" &
 
     # Move to running/
@@ -126,11 +189,9 @@ dispatch_job() {
             log_event "WARN" "JOB_RETRY" "id=$job_id attempt=$((attempt+1))/$((max_retries+1))"
         fi
 
-        # Execute run-job.sh in background so we can handle signals
         "$SCRIPTS_DIR/run-job.sh" "$running_file" &
         CURRENT_JOB_PID=$!
 
-        # Wait for job to complete
         exit_code=0
         wait "$CURRENT_JOB_PID" || exit_code=$?
         CURRENT_JOB_PID=""
@@ -140,27 +201,26 @@ dispatch_job() {
         fi
 
         attempt=$((attempt + 1))
-
-        # Don't retry if we've exhausted attempts
         if [[ $attempt -gt $max_retries ]]; then
             break
         fi
 
-        # Brief pause between retries
         log_event "INFO" "JOB_RETRY_WAIT" "id=$job_id waiting 30s before retry"
         sleep 30
     done
 
+    # Update daily counter
+    DAILY_JOB_COUNT=$((DAILY_JOB_COUNT + 1))
+    save_quota_counter
+
     if [[ $exit_code -eq 0 ]]; then
-        # Success → move to done/
         mv "$running_file" "$JOBS_DIR/done/$job_basename" 2>/dev/null || true
-        log_event "INFO" "JOB_DONE" "id=$job_id exit_code=$exit_code attempts=$((attempt+1))"
+        log_event "INFO" "JOB_DONE" "id=$job_id attempts=$((attempt+1)) daily_total=$DAILY_JOB_COUNT"
         "$SCRIPTS_DIR/notify.sh" "job_done" "$job_id" "attempts=$((attempt+1))" &
         CONSECUTIVE_FAILURES=0
     else
-        # Failure → move to failed/
         mv "$running_file" "$JOBS_DIR/failed/$job_basename" 2>/dev/null || true
-        log_event "ERROR" "JOB_FAILED" "id=$job_id exit_code=$exit_code attempts=$((attempt))"
+        log_event "ERROR" "JOB_FAILED" "id=$job_id exit_code=$exit_code attempts=$((attempt)) daily_total=$DAILY_JOB_COUNT"
         "$SCRIPTS_DIR/notify.sh" "job_failed" "$job_id" "exit_code=$exit_code attempts=$((attempt))" &
         CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
     fi
@@ -192,13 +252,18 @@ check_circuit_breaker() {
 # Main Loop
 # =============================================================================
 main() {
-    log_event "INFO" "STARTUP" "Agent loop started. POLL_INTERVAL=${POLL_INTERVAL}s"
+    log_event "INFO" "STARTUP" "Agent loop started. POLL=${POLL_INTERVAL}s MAX_JOBS/DAY=${MAX_JOBS_PER_DAY} COOLDOWN=${JOB_COOLDOWN}s AUTH=max-plan"
+
+    # Load quota counter from disk
+    load_quota_counter
+    log_event "INFO" "QUOTA_LOADED" "Jobs today: $DAILY_JOB_COUNT / $MAX_JOBS_PER_DAY"
+
     update_heartbeat
 
     local heartbeat_counter=0
 
     while [[ "$RUNNING" == "true" ]]; do
-        # Update heartbeat every ~60s (every 2 poll cycles at 30s interval)
+        # Update heartbeat every ~60s
         heartbeat_counter=$((heartbeat_counter + 1))
         if [[ $((heartbeat_counter % 2)) -eq 0 ]]; then
             update_heartbeat
@@ -207,14 +272,46 @@ main() {
         # Check circuit breaker
         check_circuit_breaker
 
+        # Check daily quota
+        if ! check_daily_quota; then
+            # Quota exceeded - wait until midnight
+            local now_epoch
+            now_epoch=$(date +%s)
+            local midnight_epoch
+            midnight_epoch=$(date -d "tomorrow 00:00:00" +%s 2>/dev/null || date -d "+1 day" +%s 2>/dev/null || echo $((now_epoch + 3600)))
+            local wait_secs=$((midnight_epoch - now_epoch))
+
+            if [[ $wait_secs -gt 0 && $wait_secs -lt 86400 ]]; then
+                log_event "WARN" "QUOTA_EXCEEDED" "Daily limit $MAX_JOBS_PER_DAY reached. Waiting ${wait_secs}s until midnight reset."
+                "$SCRIPTS_DIR/notify.sh" "quota_exceeded" "system" \
+                    "Daily limit $MAX_JOBS_PER_DAY reached ($DAILY_JOB_COUNT jobs). Waiting for midnight reset." &
+
+                # Sleep in chunks so we can still respond to signals and update heartbeat
+                local slept=0
+                while [[ $slept -lt $wait_secs ]] && [[ "$RUNNING" == "true" ]]; do
+                    sleep 60 &
+                    wait $! 2>/dev/null || true
+                    slept=$((slept + 60))
+                    update_heartbeat
+                done
+            fi
+            continue
+        fi
+
         # Look for pending jobs
         local next_job
         next_job=$(pick_next_job)
 
         if [[ -n "$next_job" ]]; then
             dispatch_job "$next_job" || true
+
+            # Cooldown between jobs (saves Max plan quota)
+            if [[ $JOB_COOLDOWN -gt 0 ]] && [[ "$RUNNING" == "true" ]]; then
+                log_event "INFO" "COOLDOWN" "Waiting ${JOB_COOLDOWN}s before next job (quota preservation)"
+                sleep "$JOB_COOLDOWN" &
+                wait $! 2>/dev/null || true
+            fi
         else
-            # No jobs available → sleep
             sleep "$POLL_INTERVAL" &
             wait $! 2>/dev/null || true
         fi
