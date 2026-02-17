@@ -358,29 +358,39 @@ invoke_claude() {
     local output_file
     output_file=$(mktemp)
 
+    # Build tool list
+    local allowed_tools=(
+        "Write" "Read" "Edit"
+        "Bash(git *)" "Bash(npm *)" "Bash(npx *)" "Bash(node *)"
+        "Bash(python *)" "Bash(python3 *)" "Bash(pytest *)"
+        "Bash(pip *)" "Bash(pip3 *)"
+        "Bash(gh pr *)" "Bash(gh issue *)"
+        "Bash(find *)" "Bash(cat *)" "Bash(ls *)" "Bash(grep *)"
+        "Bash(mkdir *)" "Bash(cp *)" "Bash(mv *)"
+        "Bash(cd *)" "Bash(pwd)" "Bash(echo *)"
+        "Bash(chmod +x *)" "Bash(head *)" "Bash(tail *)"
+        "Bash(wc *)" "Bash(sort *)" "Bash(diff *)"
+        "Bash(touch *)" "Bash(rm *.tmp)" "Bash(rm *.log)"
+        "Bash(sed *)" "Bash(tee *)" "Bash(xargs *)"
+    )
+
     local claude_args=(
         -p
         --output-format json
-        --allowedTools "Write" "Read" "Edit"
-            "Bash(git *)" "Bash(npm *)" "Bash(npx *)" "Bash(node *)"
-            "Bash(python *)" "Bash(python3 *)" "Bash(pytest *)"
-            "Bash(pip *)" "Bash(pip3 *)"
-            "Bash(find *)" "Bash(cat *)" "Bash(ls *)" "Bash(grep *)"
-            "Bash(mkdir *)" "Bash(cp *)" "Bash(mv *)"
-            "Bash(cd *)" "Bash(pwd)" "Bash(echo *)"
-            "Bash(chmod *)" "Bash(head *)" "Bash(tail *)"
-            "Bash(wc *)" "Bash(sort *)" "Bash(diff *)"
-            "Bash(touch *)" "Bash(rm *)" "Bash(sed *)"
-            "Bash(tee *)" "Bash(xargs *)"
         --model "${DEFAULT_MODEL:-claude-sonnet-4-5-20250929}"
     )
+
+    # Add each tool with its own --allowedTools flag
+    for tool in "${allowed_tools[@]}"; do
+        claude_args+=(--allowedTools "$tool")
+    done
 
     # Resume conversation if we have a session ID
     if [[ -n "$CONVERSATION_ID" ]]; then
         claude_args+=(--resume "$CONVERSATION_ID")
     fi
 
-    log "INFO" "Invoking Claude Code (session: ${CONVERSATION_ID:-new})"
+    log "INFO" "Invoking Claude Code (model: ${DEFAULT_MODEL:-claude-sonnet-4-5-20250929}, session: ${CONVERSATION_ID:-new})"
 
     # Run Claude with timeout (use remaining time budget, max 30 min per invocation)
     local elapsed=$(( $(date +%s) - JOB_START_TIME ))
@@ -674,6 +684,16 @@ state_push() {
     cd "$WORKSPACE"
     log "INFO" "Pushing results to remote"
     log_json "push_start" ""
+
+    # Ensure gh CLI is authenticated (GH_TOKEN env var is set in docker-compose)
+    if ! gh auth status &>/dev/null; then
+        log "WARN" "gh CLI not authenticated, attempting token login..."
+        if [[ -n "${GH_TOKEN:-}" ]]; then
+            echo "$GH_TOKEN" | gh auth login --with-token 2>/dev/null || true
+        elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
+            echo "$GITHUB_TOKEN" | gh auth login --with-token 2>/dev/null || true
+        fi
+    fi
 
     # Ensure everything is committed
     if [[ -n $(git status --porcelain 2>/dev/null) ]]; then

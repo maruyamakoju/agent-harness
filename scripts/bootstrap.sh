@@ -84,10 +84,9 @@ else
     apt-get update -qq
 
     # Install latest recommended driver
-    local recommended
-    recommended=$(ubuntu-drivers devices 2>/dev/null | grep "recommended" | awk '{print $3}' || echo "nvidia-driver-550")
-    info "Installing $recommended..."
-    apt-get install -y -qq "$recommended"
+    RECOMMENDED_DRIVER=$(ubuntu-drivers devices 2>/dev/null | grep "recommended" | awk '{print $3}' || echo "nvidia-driver-550")
+    info "Installing $RECOMMENDED_DRIVER..."
+    apt-get install -y -qq "$RECOMMENDED_DRIVER"
 
     ok "NVIDIA driver installed. REBOOT WILL BE NEEDED."
     NEED_REBOOT=true

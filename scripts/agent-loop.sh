@@ -251,8 +251,57 @@ check_circuit_breaker() {
 # =============================================================================
 # Main Loop
 # =============================================================================
+verify_claude_auth() {
+    log_event "INFO" "AUTH_CHECK" "Verifying Claude Code authentication..."
+    if claude --version &>/dev/null; then
+        local version
+        version=$(claude --version 2>/dev/null || echo "unknown")
+        log_event "INFO" "AUTH_CHECK" "Claude Code CLI version: $version"
+    else
+        log_event "ERROR" "AUTH_CHECK" "Claude Code CLI not found!"
+        return 1
+    fi
+
+    # Quick auth test with minimal prompt
+    if timeout 30 claude -p --output-format json "Say OK" &>/dev/null; then
+        log_event "INFO" "AUTH_CHECK" "Authentication verified (Max plan active)"
+    else
+        log_event "ERROR" "AUTH_CHECK" "Authentication FAILED. Run: claude login"
+        "$SCRIPTS_DIR/notify.sh" "auth_failed" "system" \
+            "Claude Code auth failed. Run 'docker exec -it coding-agent claude login'" &
+        return 1
+    fi
+    return 0
+}
+
+log_system_info() {
+    local disk_free
+    disk_free=$(df -h /workspaces 2>/dev/null | tail -1 | awk '{print $4}' || echo "unknown")
+    local mem_free
+    mem_free=$(free -h 2>/dev/null | awk '/^Mem:/{print $7}' || echo "unknown")
+    local gpu_info
+    gpu_info=$(nvidia-smi --query-gpu=name,memory.used,memory.total,temperature.gpu \
+        --format=csv,noheader 2>/dev/null || echo "no GPU")
+    log_event "INFO" "SYSTEM_INFO" "disk_free=$disk_free mem_avail=$mem_free gpu=$gpu_info"
+}
+
 main() {
-    log_event "INFO" "STARTUP" "Agent loop started. POLL=${POLL_INTERVAL}s MAX_JOBS/DAY=${MAX_JOBS_PER_DAY} COOLDOWN=${JOB_COOLDOWN}s AUTH=max-plan"
+    log_event "INFO" "STARTUP" "Agent loop started. POLL=${POLL_INTERVAL}s MAX_JOBS/DAY=${MAX_JOBS_PER_DAY} COOLDOWN=${JOB_COOLDOWN}s AUTH=max-plan MODEL=${DEFAULT_MODEL:-claude-sonnet-4-5-20250929}"
+
+    # Verify Claude Code authentication before starting
+    local auth_retries=0
+    while ! verify_claude_auth; do
+        auth_retries=$((auth_retries + 1))
+        if [[ $auth_retries -ge 3 ]]; then
+            log_event "ERROR" "STARTUP" "Claude auth failed after $auth_retries attempts. Exiting."
+            exit 1
+        fi
+        log_event "WARN" "STARTUP" "Auth failed. Waiting 60s before retry ($auth_retries/3)..."
+        sleep 60
+    done
+
+    # Log system info at startup
+    log_system_info
 
     # Load quota counter from disk
     load_quota_counter
@@ -263,10 +312,13 @@ main() {
     local heartbeat_counter=0
 
     while [[ "$RUNNING" == "true" ]]; do
-        # Update heartbeat every ~60s
+        # Update heartbeat every ~60s, system info every ~5min
         heartbeat_counter=$((heartbeat_counter + 1))
         if [[ $((heartbeat_counter % 2)) -eq 0 ]]; then
             update_heartbeat
+        fi
+        if [[ $((heartbeat_counter % 10)) -eq 0 ]]; then
+            log_system_info
         fi
 
         # Check circuit breaker

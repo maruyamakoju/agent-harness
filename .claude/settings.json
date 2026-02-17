@@ -62,7 +62,10 @@
       "Bash(xargs *)",
       "Bash(chmod +x *)",
       "Bash(which *)",
-      "Bash(env)"
+      "Bash(env)",
+      "Bash(gh auth status*)",
+      "Bash(gh pr *)",
+      "Bash(gh issue *)"
     ],
     "deny": [
       "Bash(sudo *)",
