@@ -34,6 +34,14 @@ case "$EVENT" in
         ICON="💀"
         TEXT="Agent heartbeat stale! System may be down."
         ;;
+    auth_failed)
+        ICON="🔑"
+        TEXT="Claude Code auth failed! Run: docker exec -it coding-agent claude login"
+        ;;
+    quota_exceeded)
+        ICON="📊"
+        TEXT="Daily job quota reached. Pausing until midnight."
+        ;;
     *)
         ICON="ℹ️"
         TEXT="Event: ${EVENT} | Job: ${JOB_ID}"

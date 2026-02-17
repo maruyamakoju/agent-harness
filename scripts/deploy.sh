@@ -46,13 +46,12 @@ preflight() {
 
     # Check required env vars
     source "$PROJECT_DIR/.env"
-    if [[ -z "${ANTHROPIC_API_KEY:-}" || "$ANTHROPIC_API_KEY" == *"XXXX"* ]]; then
-        error "ANTHROPIC_API_KEY not configured in .env"
-        exit 1
-    fi
     if [[ -z "${GITHUB_TOKEN:-}" || "$GITHUB_TOKEN" == *"XXXX"* ]]; then
         error "GITHUB_TOKEN not configured in .env"
         exit 1
+    fi
+    if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+        info "ANTHROPIC_API_KEY not set — using Max plan auth (claude login)"
     fi
 
     # Docker

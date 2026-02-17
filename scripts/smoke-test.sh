@@ -197,6 +197,64 @@ if [[ -f "$JOB_FILE" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 8. Docker container test (if --docker mode)
+# ---------------------------------------------------------------------------
+if [[ "$MODE" == "--docker" ]]; then
+    step "Testing Docker container"
+
+    cd "$PROJECT_DIR"
+
+    # Build
+    if docker compose build 2>&1 | tail -3; then
+        pass "Docker image built"
+    else
+        fail "Docker image build failed"
+    fi
+
+    # Start container
+    if docker compose up -d 2>&1; then
+        pass "Container started"
+    else
+        fail "Container failed to start"
+    fi
+
+    # Wait for container to initialize
+    sleep 10
+
+    # Check container is running
+    if docker ps --format '{{.Names}}' | grep -q "coding-agent"; then
+        pass "Container 'coding-agent' is running"
+    else
+        fail "Container not running"
+    fi
+
+    # Check Claude Code CLI is available inside container
+    if docker exec coding-agent claude --version 2>/dev/null; then
+        pass "Claude Code CLI available in container"
+    else
+        fail "Claude Code CLI not found in container"
+    fi
+
+    # Check health endpoint
+    if docker exec coding-agent test -d /harness/jobs/pending; then
+        pass "Job directories exist in container"
+    else
+        fail "Job directories missing in container"
+    fi
+
+    # Check hook is executable
+    if docker exec coding-agent test -x /harness/hooks/block-dangerous.sh; then
+        pass "Security hook is executable"
+    else
+        fail "Security hook not executable"
+    fi
+
+    # Stop container
+    docker compose down --timeout 30 2>/dev/null || true
+    pass "Container stopped"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
@@ -204,9 +262,9 @@ echo "============================================"
 echo -e " ${GREEN}Smoke test complete!${NC}"
 echo "============================================"
 echo ""
-echo "Note: This test validates scripts and hooks locally."
-echo "Full end-to-end testing requires:"
-echo "  1. Docker container build (docker compose build)"
-echo "  2. Valid ANTHROPIC_API_KEY in .env"
-echo "  3. A real git repository with SSH access"
-echo ""
+if [[ "$MODE" != "--docker" ]]; then
+    echo "Note: This test validates scripts and hooks locally."
+    echo "Run with --docker for full container testing:"
+    echo "  bash scripts/smoke-test.sh --docker"
+    echo ""
+fi

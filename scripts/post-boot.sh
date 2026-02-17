@@ -146,6 +146,24 @@ else
 fi
 
 # =========================================================================
+# Step 5.5: Setup cron jobs (watchdog + cleanup)
+# =========================================================================
+info "Setting up cron jobs..."
+
+# Install watchdog (every 5 min) and cleanup (daily 3am) for agent user
+CRON_TMP=$(mktemp)
+crontab -u "$AGENT_USER" -l 2>/dev/null > "$CRON_TMP" || true
+# Remove old entries if any
+grep -v "agent-harness" "$CRON_TMP" > "${CRON_TMP}.clean" || true
+mv "${CRON_TMP}.clean" "$CRON_TMP"
+# Add new entries
+echo "*/5 * * * * HARNESS_DIR=$HARNESS_DIR bash $HARNESS_DIR/scripts/watchdog.sh >> $HARNESS_DIR/logs/watchdog.log 2>&1" >> "$CRON_TMP"
+echo "0 3 * * * HARNESS_DIR=$HARNESS_DIR bash $HARNESS_DIR/scripts/cleanup.sh >> $HARNESS_DIR/logs/cleanup.log 2>&1" >> "$CRON_TMP"
+crontab -u "$AGENT_USER" "$CRON_TMP"
+rm -f "$CRON_TMP"
+ok "Cron jobs installed (watchdog: 5min, cleanup: daily 3am)"
+
+# =========================================================================
 # Step 6: Instructions for Claude auth
 # =========================================================================
 info "Step 6/6: Almost done!"
