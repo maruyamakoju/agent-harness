@@ -13,7 +13,12 @@
       "Bash(gh repo create:*)",
       "Bash(git branch:*)",
       "Bash(git push:*)",
-      "Bash(gh repo view:*)"
+      "Bash(gh repo view:*)",
+      "Bash(gh api:*)",
+      "Bash(wmic diskdrive:*)",
+      "Bash(powershell.exe -Command \"Get-Disk | Select-Object Number,FriendlyName,Size,PartitionStyle | Format-Table\")",
+      "Bash(powershell.exe -Command \"Get-Volume | Where-Object {$_.DriveLetter -ne $null} | Select-Object DriveLetter,FileSystemLabel,@{N=''SizeGB'';E={[math]::Round\\($_.Size/1GB,1\\)}},@{N=''FreeGB'';E={[math]::Round\\($_.SizeRemaining/1GB,1\\)}} | Format-Table -AutoSize\")",
+      "Bash(\"/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe\" -Command \"Get-Volume | Where-Object {$_.DriveLetter -ne $null} | Select-Object DriveLetter,FileSystemLabel,@{N=''SizeGB'';E={[math]::Round\\($_.Size/1GB,1\\)}},@{N=''FreeGB'';E={[math]::Round\\($_.SizeRemaining/1GB,1\\)}} | Format-Table -AutoSize\")"
     ]
   }
 }
