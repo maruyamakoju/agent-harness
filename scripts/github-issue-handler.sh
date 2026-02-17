@@ -40,13 +40,12 @@ for repo in $REPOS; do
         2>/dev/null || echo "[]")
 
     echo "$issues" | jq -c '.[]' 2>/dev/null | while IFS= read -r issue; do
-        local number title body
         number=$(echo "$issue" | jq -r '.number')
         title=$(echo "$issue" | jq -r '.title')
         body=$(echo "$issue" | jq -r '.body')
 
         # Check if already processed
-        local issue_key="${repo}#${number}"
+        issue_key="${repo}#${number}"
         if grep -qF "$issue_key" "$STATE_FILE"; then
             continue
         fi
@@ -54,30 +53,27 @@ for repo in $REPOS; do
         echo "  New agent issue: $issue_key - $title"
 
         # Extract repo URL (use the same repo by default)
-        local target_repo="git@github.com:${repo}.git"
+        target_repo="git@github.com:${repo}.git"
 
         # Extract task from title + body
-        local task="$title"
+        task="$title"
         if [[ -n "$body" ]]; then
             # Use first non-empty line of body as extended task
-            local body_first
             body_first=$(echo "$body" | head -5 | tr '\n' ' ' | head -c 200)
             task="${title}. ${body_first}"
         fi
 
         # Extract setup/test commands from body if present
-        local setup_args=()
-        local test_args=()
+        setup_args=()
+        test_args=()
 
         # Look for ```setup and ```test blocks in issue body
         if echo "$body" | grep -q "setup:"; then
-            local setup_cmd
             setup_cmd=$(echo "$body" | sed -n 's/.*setup:\s*`\([^`]*\)`.*/\1/p' | head -1)
             [[ -n "$setup_cmd" ]] && setup_args+=("--setup" "$setup_cmd")
         fi
 
         if echo "$body" | grep -q "test:"; then
-            local test_cmd
             test_cmd=$(echo "$body" | sed -n 's/.*test:\s*`\([^`]*\)`.*/\1/p' | head -1)
             [[ -n "$test_cmd" ]] && test_args+=("--test" "$test_cmd")
         fi

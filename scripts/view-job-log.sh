@@ -71,9 +71,7 @@ case "$MODE" in
 
             echo ""
             echo -e "${BOLD}Stats:${NC}"
-            local total_events
             total_events=$(wc -l < "$JSONL_FILE")
-            local duration
             duration=$(jq -r 'select(.event == "cleanup") | .detail' "$JSONL_FILE" 2>/dev/null | head -1)
             echo "  Total events: $total_events"
             echo "  Duration: ${duration:-unknown}"

@@ -93,7 +93,6 @@ esac
 
 # Summary
 echo ""
-local p r d f
 p=$(find "$JOBS_DIR/pending" -name "*.json" 2>/dev/null | wc -l | tr -d ' ')
 r=$(find "$JOBS_DIR/running" -name "*.json" 2>/dev/null | wc -l | tr -d ' ')
 d=$(find "$JOBS_DIR/done" -name "*.json" 2>/dev/null | wc -l | tr -d ' ')

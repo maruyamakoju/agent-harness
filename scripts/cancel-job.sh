@@ -24,7 +24,6 @@ FOUND=0
 # Check pending jobs
 for f in "$JOBS_DIR/pending"/*${PATTERN}*.json; do
     [[ -f "$f" ]] || continue
-    local job_id
     job_id=$(jq -r '.id' "$f")
     echo "Cancelling pending job: $job_id"
     mv "$f" "$JOBS_DIR/failed/$(basename "$f")"
@@ -34,7 +33,6 @@ done
 # Check running jobs (mark for cancellation, loop will pick it up)
 for f in "$JOBS_DIR/running"/*${PATTERN}*.json; do
     [[ -f "$f" ]] || continue
-    local job_id
     job_id=$(jq -r '.id' "$f")
     echo "Marking running job for cancellation: $job_id"
     # Add cancelled flag

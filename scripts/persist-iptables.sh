@@ -26,7 +26,7 @@ case "${1:-help}" in
         echo "Restoring egress rules..."
 
         # Wait for Docker network to be ready
-        local retries=0
+        retries=0
         while ! docker network ls 2>/dev/null | grep -q "agent-net"; do
             retries=$((retries + 1))
             if [[ $retries -gt 30 ]]; then
@@ -39,7 +39,6 @@ case "${1:-help}" in
 
         # Apply egress rules
         if [[ -f "$AGENT_HARNESS/scripts/setup-egress.sh" ]]; then
-            local network_name
             network_name=$(docker network ls --filter "name=agent-net" --format "{{.Name}}" | head -1)
             bash "$AGENT_HARNESS/scripts/setup-egress.sh" "$network_name"
         elif [[ -f "$RULES_FILE" ]]; then

@@ -235,7 +235,6 @@ while true; do
 
     # Process each update
     echo "$UPDATES" | jq -c '.result[]' 2>/dev/null | while IFS= read -r update; do
-        local update_id chat_id text
         update_id=$(echo "$update" | jq -r '.update_id')
         chat_id=$(echo "$update" | jq -r '.message.chat.id // empty')
         text=$(echo "$update" | jq -r '.message.text // empty')
