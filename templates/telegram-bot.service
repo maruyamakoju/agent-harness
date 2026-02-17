@@ -1,0 +1,17 @@
+[Unit]
+Description=Telegram Bot for Agent Job Submission
+After=network-online.target agent-harness.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=agent
+Group=agent
+EnvironmentFile=/home/agent/agent-harness/.env
+ExecStart=/bin/bash /home/agent/agent-harness/scripts/telegram-bot.sh
+Restart=always
+RestartSec=10
+Environment=HARNESS_DIR=/home/agent/agent-harness
+
+[Install]
+WantedBy=multi-user.target

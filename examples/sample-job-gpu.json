@@ -1,0 +1,15 @@
+{
+  "id": "2026-02-16T100000Z-train-mnist",
+  "repo": "git@github.com:org/ml-project.git",
+  "base_ref": "main",
+  "work_branch": "agent/2026-02-16-train-mnist",
+  "task": "MNISTデータセットでCNNモデルをトレーニングし、精度95%以上を達成するテストを通す",
+  "commands": {
+    "setup": ["pip install -r requirements.txt"],
+    "test": ["pytest tests/ -v"]
+  },
+  "time_budget_sec": 7200,
+  "max_retries": 1,
+  "gpu_required": true,
+  "created_at": "2026-02-16T10:00:00Z"
+}

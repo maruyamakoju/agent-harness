@@ -1,0 +1,19 @@
+# =============================================================================
+# Crontab for agent user
+# Install with: crontab templates/crontab.example
+# =============================================================================
+
+# Cleanup old jobs and logs daily at 3 AM
+0 3 * * * /home/agent/agent-harness/scripts/cleanup.sh >> /home/agent/agent-harness/logs/cleanup.log 2>&1
+
+# GPU temperature monitoring every minute (host-level)
+* * * * * nvidia-smi --query-gpu=timestamp,temperature.gpu,utilization.gpu,memory.used --format=csv,noheader >> /home/agent/agent-harness/logs/gpu-metrics.csv 2>/dev/null
+
+# Heartbeat watchdog: alert if agent is stale for 10 minutes
+*/5 * * * * /home/agent/agent-harness/scripts/watchdog.sh >> /home/agent/agent-harness/logs/watchdog.log 2>&1
+
+# Weekly dependency update job (example - customize repo)
+# 0 9 * * 1 /home/agent/agent-harness/scripts/create-job.sh --repo git@github.com:org/repo.git --task "Update all npm dependencies and fix any breaking changes" --setup "npm ci" --test "npm test"
+
+# Daily test run (example - customize repo)
+# 0 6 * * * /home/agent/agent-harness/scripts/create-job.sh --repo git@github.com:org/repo.git --task "Run full test suite and fix any failures" --setup "npm ci" --test "npm test" --test "npm run e2e"

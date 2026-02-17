@@ -1,0 +1,87 @@
+# =============================================================================
+# docker-compose.yml - 24/7 Autonomous Coding Agent
+# =============================================================================
+version: "3.8"
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: coding-agent
+    hostname: coding-agent
+    restart: unless-stopped
+
+    # GPU access for Ollama / local ML workloads
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    # Environment
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GH_TOKEN=${GITHUB_TOKEN}
+      - HARNESS_DIR=/harness
+      - WORKSPACES_DIR=/workspaces
+      - POLL_INTERVAL=30
+      - TZ=Asia/Tokyo
+      - HOME=/home/agent
+
+    # Volume mounts (strict: only what's needed)
+    volumes:
+      # Job queue (host ↔ container)
+      - ./jobs:/harness/jobs
+      # Logs (persisted on host)
+      - ./logs:/harness/logs
+      # SSH key for git push (read-only)
+      - ${SSH_KEY_PATH:-~/.ssh/id_ed25519}:/home/agent/.ssh/id_ed25519:ro
+      - ${SSH_KEY_PATH:-~/.ssh/id_ed25519}.pub:/home/agent/.ssh/id_ed25519.pub:ro
+      # Workspaces (ephemeral, can be tmpfs for speed)
+      - agent-workspaces:/workspaces
+
+    # Network: egress only to required services
+    networks:
+      - agent-net
+
+    # DNS (use public DNS to avoid leaking internal queries)
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+
+    # Security: drop all caps, add only what's needed
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW  # for DNS resolution
+    security_opt:
+      - no-new-privileges:true
+
+    # Read-only root filesystem (scripts are already copied in)
+    # Writable: /harness/jobs, /harness/logs, /workspaces, /tmp, /home/agent
+    tmpfs:
+      - /tmp:size=2G
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "bash", "-c", "test -f /harness/logs/heartbeat.json && test $$(( $$(date +%s) - $$(date -r /harness/logs/heartbeat.json +%s) )) -lt 300"]
+      interval: 60s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+    # Ollama on host is accessible via host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  agent-workspaces:
+    driver: local
+
+networks:
+  agent-net:
+    driver: bridge

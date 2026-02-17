@@ -1,0 +1,29 @@
+# Environment secrets
+.env
+
+# Job data (runtime state)
+jobs/pending/*.json
+jobs/running/*.json
+jobs/done/*.json
+jobs/failed/*.json
+
+# Logs
+logs/*.jsonl
+logs/*.log
+logs/*.json
+
+# Workspaces
+workspaces/
+
+# Docker
+.docker/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

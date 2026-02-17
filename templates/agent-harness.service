@@ -1,0 +1,39 @@
+[Unit]
+Description=24/7 Autonomous Coding Agent Harness
+Documentation=https://github.com/your-org/agent-harness
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=agent
+Group=agent
+
+# Start the agent container
+ExecStartPre=/usr/bin/docker compose -f /home/agent/agent-harness/docker-compose.yml pull
+ExecStart=/usr/bin/docker compose -f /home/agent/agent-harness/docker-compose.yml up --abort-on-container-exit
+ExecStop=/usr/bin/docker compose -f /home/agent/agent-harness/docker-compose.yml down --timeout 120
+
+# Restart policy
+Restart=always
+RestartSec=30
+
+# Safety limits
+RuntimeMaxSec=86400
+# Restart daily to prevent resource leaks (systemd will restart it)
+
+# Watchdog: if container becomes unhealthy, systemd restarts
+WatchdogSec=600
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agent-harness
+
+# Resource limits (host-level)
+MemoryMax=48G
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target

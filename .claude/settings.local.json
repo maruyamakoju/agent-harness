@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash /c/Users/07013/Desktop/0216muzin/hooks/block-dangerous.sh:*)",
+      "Bash(echo:*)",
+      "Bash(find:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "ollama-review": {
+    "command": "npx",
+    "args": [
+      "ollama-mcp-server",
+      "--host",
+      "host.docker.internal:11434"
+    ],
+    "description": "Local LLM via Ollama for code review and lightweight tasks"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "id": "2026-02-16T090000Z-feature-user-auth",
+  "repo": "git@github.com:org/repo.git",
+  "base_ref": "main",
+  "work_branch": "agent/2026-02-16-feature-user-auth",
+  "task": "ユーザー認証APIを実装し、JWT発行・検証のE2Eテストを通す",
+  "commands": {
+    "setup": ["npm ci", "npx prisma migrate dev"],
+    "test": ["npm test", "npm run e2e"]
+  },
+  "time_budget_sec": 3600,
+  "max_retries": 2,
+  "gpu_required": false,
+  "created_at": "2026-02-16T09:00:00Z"
+}

@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Secrets
+.env
+*.pem
+*.key
+
+# Runtime data
+jobs/pending/*.json
+jobs/running/*.json
+jobs/done/*.json
+jobs/failed/*.json
+logs/
+
+# Development
+examples/
+templates/
+tests/
+*.md
+!CLAUDE.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
