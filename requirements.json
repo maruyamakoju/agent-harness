@@ -1,0 +1,22 @@
+{
+  "task": "READMEの冒頭に日本語のプロジェクト概要セクションを追加してください。プロジェクト名、目的、主な機能、セットアップ方法を含めてください。",
+  "subtasks": [
+    {
+      "id": 1,
+      "description": "Create Japanese overview section with project name, purpose, key features, and quick setup guide. Insert at the top of README.md before the English title.",
+      "files_to_modify": [
+        "README.md"
+      ],
+      "files_to_create": [],
+      "test_strategy": "Run grep to verify Japanese text exists in README.md: `grep -q プロジェクト README.md`",
+      "complexity": "low"
+    }
+  ],
+  "estimated_iterations": 1,
+  "risks": [
+    "Incorrect Japanese translation or terminology",
+    "Breaking existing markdown formatting or links",
+    "Inconsistency between Japanese and English content"
+  ],
+  "approach": "Add a comprehensive Japanese overview section at the very beginning of README.md that includes: (1) Project name in Japanese, (2) Project purpose and description, (3) Key features highlighting the 24/7 autonomous agent, RTX 4090 GPU support, 5-layer security model, Docker sandboxing, and job management system, (4) Quick setup instructions summarizing the key steps. The Japanese section will be placed before the existing English title to serve as a bilingual introduction. The section will be concise but informative, maintaining consistency with the English content while being natural in Japanese."
+}
