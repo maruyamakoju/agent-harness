@@ -269,6 +269,43 @@ def api_delete_job(job_id: str):
     return jsonify({"deleted": job_id})
 
 
+# ===== API: Job Re-run ======================================================
+
+@app.route("/api/jobs/<job_id>/rerun", methods=["POST"])
+@require_auth
+def api_rerun_job(job_id: str):
+    """Re-submit a failed/done job as a new pending job."""
+    job_id = _sanitize_job_id(job_id)
+    data, status = _find_job(job_id)
+    if not data:
+        abort(404, description="Job not found")
+    if status not in ("done", "failed"):
+        abort(400, description="Can only re-run done or failed jobs")
+
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
+    old_slug = job_id.split("-", 3)[-1] if "-" in job_id else job_id
+    new_slug = old_slug[:40] if old_slug else uuid.uuid4().hex[:8]
+    new_id = f"{ts}-{new_slug}"
+
+    new_job = {
+        "id": new_id,
+        "repo": data.get("repo", ""),
+        "base_ref": data.get("base_ref", "main"),
+        "work_branch": f"agent/{new_id}",
+        "task": data.get("task", ""),
+        "commands": data.get("commands", {"setup": [], "test": []}),
+        "time_budget_sec": data.get("time_budget_sec", 3600),
+        "max_retries": data.get("max_retries", 2),
+        "gpu_required": data.get("gpu_required", False),
+        "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+
+    PENDING.mkdir(parents=True, exist_ok=True)
+    out = PENDING / f"{new_id}.json"
+    out.write_text(json.dumps(new_job, indent=2, ensure_ascii=False), encoding="utf-8")
+    return jsonify(new_job), 201
+
+
 # ===== API: Logs ============================================================
 
 @app.route("/api/logs/<job_id>")
@@ -346,6 +383,45 @@ def api_log_stats():
                 })
     total = sum(s["size"] for s in stats)
     return jsonify({"files": stats, "total_bytes": total})
+
+
+# ===== API: GPU Info ========================================================
+
+@app.route("/api/gpu")
+@require_auth
+def api_gpu():
+    """Return GPU info from heartbeat.json if available."""
+    heartbeat = _read_json(HEARTBEAT_FILE) or {}
+    return jsonify({
+        "gpu": heartbeat.get("gpu", None),
+        "available": heartbeat.get("gpu") is not None,
+    })
+
+
+# ===== API: Job Duration ===================================================
+
+@app.route("/api/jobs/<job_id>/duration")
+@require_auth
+def api_job_duration(job_id: str):
+    """Calculate job duration from JSONL events."""
+    job_id = _sanitize_job_id(job_id)
+    jp = _jsonl_path(job_id)
+    if not jp.exists():
+        return jsonify({"duration_sec": None, "start": None, "end": None})
+    events = []
+    for line in jp.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if line:
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+    if not events:
+        return jsonify({"duration_sec": None, "start": None, "end": None})
+    start = events[0].get("timestamp")
+    end = events[-1].get("timestamp")
+    elapsed = events[-1].get("elapsed_sec")
+    return jsonify({"duration_sec": elapsed, "start": start, "end": end})
 
 
 # ===== SSE Streams ==========================================================

@@ -142,6 +142,43 @@ def main():
 
     check("GET /api/logs/nonexistent", client.get("/api/logs/nonexistent"), 404)
 
+    # --- Re-run API ---
+    print("\n[Re-run API]")
+    # Find a done or failed job to re-run
+    done_jobs = [j for j in jobs if j.get("status") in ("done", "failed")]
+    if done_jobs:
+        rid = done_jobs[0]["id"]
+        r = client.post(f"/api/jobs/{rid}/rerun")
+        check(f"POST /api/jobs/{rid}/rerun", r, 201)
+        if r.status_code == 201:
+            rerun = r.get_json()
+            print(f"        re-run created: {rerun['id']}")
+            # Clean up the re-run job
+            client.delete(f"/api/jobs/{rerun['id']}")
+    else:
+        print("        (no done/failed jobs to test re-run)")
+
+    r = client.post("/api/jobs/nonexistent-id/rerun")
+    check("POST /api/jobs/nonexistent-id/rerun (404)", r, 404)
+
+    # --- Duration API ---
+    print("\n[Duration API]")
+    if jobs:
+        jid = jobs[0]["id"]
+        r = client.get(f"/api/jobs/{jid}/duration")
+        check(f"GET /api/jobs/{jid}/duration", r)
+        if r.status_code == 200:
+            dur = r.get_json()
+            print(f"        duration: {dur.get('duration_sec')}s")
+
+    # --- GPU API ---
+    print("\n[GPU API]")
+    r = client.get("/api/gpu")
+    check("GET /api/gpu", r)
+    if r.status_code == 200:
+        gpu = r.get_json()
+        print(f"        available: {gpu.get('available')}")
+
     # --- Notifications API ---
     print("\n[Notifications API]")
     r = client.get("/api/notifications")

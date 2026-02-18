@@ -104,7 +104,9 @@ services:
     networks:
       - agent-net
     depends_on:
-      - agent
+      agent:
+        condition: service_started
+        required: false
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7860/api/status')"]
       interval: 30s

@@ -180,6 +180,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
     <div class="card"><div class="label">Running</div><div class="value" id="c-running">--</div></div>
     <div class="card"><div class="label">Done</div><div class="value" id="c-done">--</div></div>
     <div class="card"><div class="label">Failed</div><div class="value" id="c-failed">--</div></div>
+    <div class="card" id="gpu-card" style="display:none"><div class="label">GPU</div><div class="value" id="c-gpu" style="font-size:16px;">--</div><div class="sub" id="c-gpu-sub"></div></div>
   </div>
   <h3 style="margin-bottom:12px">Recent Activity</h3>
   <ul class="feed" id="activity-feed"><li style="color:var(--text2)">Loading...</li></ul>
@@ -193,9 +194,10 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
     <button class="filter-btn" data-filter="running">Running</button>
     <button class="filter-btn" data-filter="done">Done</button>
     <button class="filter-btn" data-filter="failed">Failed</button>
+    <input type="text" id="job-search" placeholder="Search repo or task..." style="width:auto;min-width:220px;padding:4px 12px;font-size:13px;border-radius:20px;">
   </div>
   <table>
-    <thead><tr><th>Job ID</th><th>Repo</th><th>Task</th><th>Status</th><th>Budget</th><th>Actions</th></tr></thead>
+    <thead><tr><th>Job ID</th><th>Repo</th><th>Task</th><th>Status</th><th>Duration</th><th>Actions</th></tr></thead>
     <tbody id="jobs-tbody"><tr><td colspan="6" style="color:var(--text2)">Loading...</td></tr></tbody>
   </table>
 </div>
@@ -328,6 +330,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 let currentFilter = 'all';
 let statusSSE = null;
 let logSSE = null;
+let allJobs = []; // cached for search
 
 // ===== Tabs =====
 document.querySelectorAll('.tab').forEach(t => {
@@ -373,6 +376,12 @@ function fmtSize(b) {
   if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
   return (b / 1048576).toFixed(1) + ' MB';
 }
+function fmtDuration(sec) {
+  if (sec == null) return '-';
+  if (sec < 60) return sec + 's';
+  if (sec < 3600) return Math.floor(sec / 60) + 'm ' + (sec % 60) + 's';
+  return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm';
+}
 
 // ===== Dashboard =====
 function updateStatusUI(data) {
@@ -395,6 +404,12 @@ function updateStatusUI(data) {
   document.getElementById('c-running').textContent = c.running ?? '--';
   document.getElementById('c-done').textContent = c.done ?? '--';
   document.getElementById('c-failed').textContent = c.failed ?? '--';
+  // GPU info from heartbeat
+  if (hb.gpu) {
+    document.getElementById('gpu-card').style.display = '';
+    document.getElementById('c-gpu').textContent = hb.gpu.name || 'Available';
+    document.getElementById('c-gpu-sub').textContent = hb.gpu.memory || '';
+  }
 }
 
 async function loadDashboard() {
@@ -403,6 +418,16 @@ async function loadDashboard() {
     const data = await r.json();
     updateStatusUI(data);
   } catch(e) { console.error(e); }
+  // Also try dedicated GPU endpoint
+  try {
+    const gr = await api('/api/gpu');
+    const gd = await gr.json();
+    if (gd.available && gd.gpu) {
+      document.getElementById('gpu-card').style.display = '';
+      document.getElementById('c-gpu').textContent = gd.gpu.name || 'Available';
+      document.getElementById('c-gpu-sub').textContent = gd.gpu.memory || '';
+    }
+  } catch(e) {}
   loadActivity();
 }
 
@@ -439,26 +464,57 @@ async function loadJobs() {
   const url = currentFilter === 'all' ? '/api/jobs' : '/api/jobs?status=' + currentFilter;
   try {
     const r = await api(url);
-    const jobs = await r.json();
-    renderJobs(jobs);
+    allJobs = await r.json();
+    applySearch();
   } catch(e) { toast(e.message, 'error'); }
 }
 
-function renderJobs(jobs) {
+function applySearch() {
+  const q = (document.getElementById('job-search').value || '').toLowerCase().trim();
+  const filtered = q ? allJobs.filter(j =>
+    (j.repo || '').toLowerCase().includes(q) ||
+    (j.task || '').toLowerCase().includes(q) ||
+    (j.id || '').toLowerCase().includes(q)
+  ) : allJobs;
+  renderJobs(filtered);
+}
+
+// Debounced search
+let searchTimer = null;
+document.getElementById('job-search').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(applySearch, 200);
+});
+
+async function renderJobs(jobs) {
   const tbody = document.getElementById('jobs-tbody');
   if (!jobs.length) { tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text2)">No jobs found.</td></tr>'; return; }
+
+  // Fetch durations in parallel
+  const durations = {};
+  await Promise.all(jobs.map(async j => {
+    if (j.status === 'pending') return;
+    try {
+      const dr = await fetch('/api/jobs/' + j.id + '/duration');
+      if (dr.ok) durations[j.id] = await dr.json();
+    } catch(e) {}
+  }));
+
   tbody.innerHTML = jobs.map(j => {
     const repo = (j.repo || '').replace(/.*\/\/github\.com\//, '').replace(/\.git$/, '');
     const task = truncate(j.task || '', 60);
-    const budget = j.time_budget_sec ? Math.round(j.time_budget_sec / 60) + 'm' : '-';
+    const dur = durations[j.id];
+    const durText = dur ? fmtDuration(dur.duration_sec) : '-';
+    const canRerun = j.status === 'done' || j.status === 'failed';
     return `<tr data-id="${escHtml(j.id)}">
       <td style="font-family:monospace;font-size:12px;white-space:nowrap;">${escHtml(j.id)}</td>
       <td>${escHtml(repo)}</td>
       <td>${escHtml(task)}</td>
       <td><span class="badge ${j.status}">${j.status}</span></td>
-      <td>${budget}</td>
-      <td>
+      <td style="font-size:12px;white-space:nowrap;">${durText}</td>
+      <td style="white-space:nowrap;">
         <button class="btn btn-sm" onclick="toggleDetail('${j.id}')">Detail</button>
+        ${canRerun ? `<button class="btn btn-sm" onclick="rerunJob('${j.id}')" style="color:var(--accent);border-color:var(--accent);">Re-run</button>` : ''}
         ${j.status === 'pending' ? `<button class="btn btn-sm danger" onclick="cancelJob('${j.id}')">Cancel</button>` : ''}
       </td>
     </tr><tr class="detail-row" id="detail-${j.id}" style="display:none"><td colspan="6"></td></tr>`;
@@ -472,8 +528,11 @@ async function toggleDetail(id) {
   const cell = row.querySelector('td');
   cell.innerHTML = '<span style="color:var(--text2)">Loading...</span>';
   try {
-    const r = await api('/api/jobs/' + id);
-    const j = await r.json();
+    const [jr, dr] = await Promise.all([
+      api('/api/jobs/' + id),
+      fetch('/api/jobs/' + id + '/duration').then(r => r.ok ? r.json() : null).catch(() => null),
+    ]);
+    const j = await jr.json();
     let eventsHtml = '';
     try {
       const er = await fetch('/api/logs/' + id + '/events');
@@ -487,10 +546,15 @@ async function toggleDetail(id) {
       }
     } catch(e) {}
     const prLink = j.pr_url ? `<div style="margin-top:8px"><strong>PR:</strong> <a href="${escHtml(j.pr_url)}" target="_blank">${escHtml(j.pr_url)}</a></div>` : '';
+    const durInfo = dr && dr.duration_sec != null ? `<div style="margin-top:8px"><strong>Duration:</strong> ${fmtDuration(dr.duration_sec)} (${dr.start} - ${dr.end})</div>` : '';
+    const canRerun = j.status === 'done' || j.status === 'failed';
     cell.innerHTML = `<div class="job-detail">
       <pre>${escHtml(JSON.stringify({repo:j.repo, base_ref:j.base_ref, work_branch:j.work_branch, task:j.task, commands:j.commands, time_budget_sec:j.time_budget_sec, gpu_required:j.gpu_required, created_at:j.created_at}, null, 2))}</pre>
-      ${prLink}${eventsHtml}
-      <div style="margin-top:8px"><button class="btn btn-sm" onclick="viewJobLog('${id}')">View Log</button></div>
+      ${prLink}${durInfo}${eventsHtml}
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button class="btn btn-sm" onclick="viewJobLog('${id}')">View Log</button>
+        ${canRerun ? `<button class="btn btn-sm" onclick="rerunJob('${id}')" style="color:var(--accent);border-color:var(--accent);">Re-run</button>` : ''}
+      </div>
     </div>`;
   } catch(e) { cell.innerHTML = '<span style="color:var(--red)">' + escHtml(e.message) + '</span>'; }
 }
@@ -516,11 +580,22 @@ async function cancelJob(id) {
   } catch(e) { toast(e.message, 'error'); }
 }
 
+async function rerunJob(id) {
+  if (!confirm('Re-run job ' + id + '?\nA new pending job will be created with the same settings.')) return;
+  try {
+    const r = await api('/api/jobs/' + id + '/rerun', { method: 'POST' });
+    const j = await r.json();
+    toast('Re-run submitted: ' + j.id, 'success');
+    loadJobs();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
 document.querySelectorAll('.filter-btn').forEach(b => {
   b.addEventListener('click', () => {
     document.querySelectorAll('.filter-btn').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
     currentFilter = b.dataset.filter;
+    document.getElementById('job-search').value = '';
     loadJobs();
   });
 });
