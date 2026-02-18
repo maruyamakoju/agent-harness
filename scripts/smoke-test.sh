@@ -147,7 +147,7 @@ done
 step "Testing heartbeat and monitor"
 
 # Create a fake heartbeat
-jq -n '{timestamp: (now | todate), status: "alive", queue: {pending: 1, running: 0, done: 0, failed: 0}, consecutive_failures: 0}' \
+jq -n '{timestamp: (now | todate), status: "alive", queue: {pending: 1, running: 0, done: 0, failed: 0}, consecutive_failures: 0, quota: {jobs_today: 5, max_per_day: 20}}' \
     > "$HARNESS_DIR/logs/heartbeat.json"
 
 if [[ -f "$HARNESS_DIR/logs/heartbeat.json" ]]; then
@@ -164,6 +164,13 @@ if bash "$HARNESS_DIR/scripts/monitor.sh" once > /dev/null 2>&1; then
     pass "Monitor script runs without error"
 else
     fail "Monitor script failed"
+fi
+
+# Test status.sh
+if bash "$HARNESS_DIR/scripts/status.sh" > /dev/null 2>&1; then
+    pass "Status script runs without error"
+else
+    fail "Status script failed"
 fi
 
 # ---------------------------------------------------------------------------
