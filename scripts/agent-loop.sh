@@ -327,6 +327,13 @@ main() {
         fi
         if [[ $((heartbeat_counter % 10)) -eq 0 ]]; then
             log_system_info
+
+            # Poll GitHub Issues for new agent tasks (every ~5min)
+            if [[ -n "${AGENT_WATCH_REPOS:-}" ]]; then
+                log_event "INFO" "ISSUE_POLL" "Checking GitHub Issues for agent tasks..."
+                "$SCRIPTS_DIR/github-issue-handler.sh" $AGENT_WATCH_REPOS 2>&1 | \
+                    while IFS= read -r line; do log_event "INFO" "ISSUE_POLL" "$line"; done || true
+            fi
         fi
 
         # Check circuit breaker

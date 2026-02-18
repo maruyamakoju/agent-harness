@@ -36,6 +36,8 @@ services:
       - MAX_JOBS_PER_DAY=${MAX_JOBS_PER_DAY:-20}
       - JOB_COOLDOWN=${JOB_COOLDOWN:-60}
       - DEFAULT_MODEL=${DEFAULT_MODEL:-claude-sonnet-4-5-20250929}
+      # GitHub Issue → auto-job (space-separated repo list)
+      - AGENT_WATCH_REPOS=${AGENT_WATCH_REPOS:-}
 
     # Volume mounts
     volumes:

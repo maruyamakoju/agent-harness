@@ -87,6 +87,10 @@ fi
 TIMESTAMP=$(date -u +%Y-%m-%dT%H%M%SZ)
 # Create a slug from the task (first 40 chars, lowercased, spaces→hyphens)
 TASK_SLUG=$(echo "$TASK" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)
+# Fallback to random suffix if slug is empty (e.g. non-ASCII task)
+if [[ -z "$TASK_SLUG" ]]; then
+    TASK_SLUG=$(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 8)
+fi
 JOB_ID="${TIMESTAMP}-${TASK_SLUG}"
 
 if [[ -n "$BRANCH_OVERRIDE" ]]; then
