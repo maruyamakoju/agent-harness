@@ -697,7 +697,17 @@ state_push() {
         fi
     fi
 
-    # Remove agent artifact files (they're included in PR body, not needed in repo)
+    # Save agent artifact content for PR body before removing from repo
+    local progress_for_pr=""
+    if [[ -f "$WORKSPACE/claude-progress.txt" ]]; then
+        progress_for_pr=$(cat "$WORKSPACE/claude-progress.txt")
+    fi
+    local approach_for_pr=""
+    if [[ -f "$WORKSPACE/requirements.json" ]]; then
+        approach_for_pr=$(jq -r '.approach // empty' "$WORKSPACE/requirements.json" 2>/dev/null || true)
+    fi
+
+    # Remove agent artifact files (not needed in repo)
     rm -f "$WORKSPACE/claude-progress.txt" "$WORKSPACE/requirements.json" 2>/dev/null
 
     # Ensure everything is committed
@@ -742,10 +752,10 @@ EOF
 ${TASK}
 
 ### Progress
-$(cat "$WORKSPACE/claude-progress.txt" 2>/dev/null || echo "_No progress file found._")
+${progress_for_pr:-_No progress file found._}
 
 ### Implementation Notes
-$(cat "$WORKSPACE/requirements.json" 2>/dev/null | jq -r '.approach // empty' 2>/dev/null || echo "_No approach notes._")
+${approach_for_pr:-_No approach notes._}
 
 ---
 _This PR was created automatically by the 24/7 Autonomous Coding Agent._
