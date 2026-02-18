@@ -86,6 +86,32 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  # Web dashboard for monitoring agent
+  dashboard:
+    build: ./dashboard
+    container_name: agent-dashboard
+    restart: unless-stopped
+    ports:
+      - "7860:7860"
+    environment:
+      - HARNESS_DIR=/harness
+      - TZ=Asia/Tokyo
+      - DASHBOARD_TOKEN=${DASHBOARD_TOKEN:-}
+    volumes:
+      - ./jobs:/harness/jobs:ro
+      - ./logs:/harness/logs:ro
+      - ./jobs/pending:/harness/jobs/pending  # write for job submission
+    networks:
+      - agent-net
+    depends_on:
+      - agent
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7860/api/status')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
 volumes:
   agent-workspaces:
     driver: local
