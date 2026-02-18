@@ -73,7 +73,10 @@ RUN apt-get purge -y sudo 2>/dev/null || true \
 # -----------------------------------------------------------------------------
 # Unprivileged agent user
 # -----------------------------------------------------------------------------
-RUN groupadd -g 1000 agent \
+# Remove default ubuntu user (UID 1000) and create agent user
+RUN userdel -r ubuntu 2>/dev/null || true \
+    && groupdel ubuntu 2>/dev/null || true \
+    && groupadd -g 1000 agent \
     && useradd -m -u 1000 -g agent -s /bin/bash agent
 
 # Create workspace directories owned by agent
@@ -85,14 +88,14 @@ RUN mkdir -p /harness/jobs/pending \
              /harness/scripts \
              /harness/hooks \
              /workspaces \
-    && chown -R agent:agent /harness /workspaces
+    && chown -R 1000:1000 /harness /workspaces
 
 # -----------------------------------------------------------------------------
 # SSH config for GitHub
 # -----------------------------------------------------------------------------
 RUN mkdir -p /home/agent/.ssh \
     && ssh-keyscan github.com gitlab.com bitbucket.org >> /home/agent/.ssh/known_hosts 2>/dev/null \
-    && chown -R agent:agent /home/agent/.ssh \
+    && chown -R 1000:1000 /home/agent/.ssh \
     && chmod 700 /home/agent/.ssh \
     && chmod 644 /home/agent/.ssh/known_hosts
 
@@ -107,10 +110,10 @@ RUN git config --system user.name "Autonomous Agent" \
 # -----------------------------------------------------------------------------
 # Copy harness scripts & hooks (changes frequently → late layer)
 # -----------------------------------------------------------------------------
-COPY --chown=agent:agent scripts/ /harness/scripts/
-COPY --chown=agent:agent hooks/  /harness/hooks/
-COPY --chown=agent:agent CLAUDE.md /harness/CLAUDE.md
-COPY --chown=agent:agent .claude/ /home/agent/.claude/
+COPY --chown=1000:1000 scripts/ /harness/scripts/
+COPY --chown=1000:1000 hooks/  /harness/hooks/
+COPY --chown=1000:1000 CLAUDE.md /harness/CLAUDE.md
+COPY --chown=1000:1000 .claude/ /home/agent/.claude/
 
 RUN chmod +x /harness/scripts/*.sh /harness/hooks/*.sh
 
