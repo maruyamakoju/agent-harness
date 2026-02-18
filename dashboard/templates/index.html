@@ -15,34 +15,48 @@
 body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 14px; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
+
+/* Header */
 .header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
 .header h1 { font-size: 18px; font-weight: 600; }
 .header .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text2); }
 .header .dot.alive { background: var(--green); }
 .header .dot.dead { background: var(--red); }
 .header .meta { margin-left: auto; color: var(--text2); font-size: 12px; display: flex; align-items: center; gap: 12px; }
+
+/* Tabs */
 .tabs { display: flex; background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 24px; overflow-x: auto; }
-.tab { padding: 10px 20px; cursor: pointer; color: var(--text2); border-bottom: 2px solid transparent; font-size: 14px; transition: color .15s; white-space: nowrap; }
+.tab { padding: 10px 20px; cursor: pointer; color: var(--text2); border-bottom: 2px solid transparent; font-size: 14px; transition: color .15s; white-space: nowrap; user-select: none; }
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+/* Layout */
 .content { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .panel { display: none; }
 .panel.active { display: block; }
+
+/* Cards */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 24px; }
 .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
 .card .label { font-size: 12px; color: var(--text2); letter-spacing: .5px; margin-bottom: 4px; }
 .card .value { font-size: 28px; font-weight: 600; }
 .card .sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+/* Table */
 table { width: 100%; border-collapse: collapse; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 th { text-align: left; padding: 10px 14px; background: var(--bg3); color: var(--text2); font-size: 12px; letter-spacing: .5px; border-bottom: 1px solid var(--border); }
 td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: top; }
 tr:last-child td { border-bottom: none; }
 tr:hover td { background: rgba(88,166,255,.04); }
+
+/* Badge */
 .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
 .badge.pending  { background: rgba(210,153,34,.15); color: var(--yellow); }
 .badge.running  { background: rgba(88,166,255,.15); color: var(--accent); }
 .badge.done     { background: rgba(63,185,80,.15); color: var(--green); }
 .badge.failed   { background: rgba(248,81,73,.15); color: var(--red); }
+
+/* Forms */
 .form-group { margin-bottom: 16px; }
 .form-group label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--text2); }
 input[type="text"], input[type="number"], textarea, select {
@@ -52,6 +66,8 @@ input[type="text"], input[type="number"], textarea, select {
 textarea { min-height: 80px; resize: vertical; }
 input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* Buttons */
 .btn { display: inline-block; padding: 8px 18px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg3); color: var(--text); cursor: pointer; font-size: 14px; font-family: inherit; transition: background .15s; }
 .btn:hover { background: var(--border); }
 .btn.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
@@ -60,20 +76,30 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .btn.danger:hover { background: rgba(248,81,73,.1); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn-sm { padding: 2px 10px; font-size: 12px; }
+
+/* Filters */
 .filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .filter-btn { padding: 4px 14px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text2); cursor: pointer; font-size: 13px; transition: all .15s; }
 .filter-btn:hover { border-color: var(--text2); }
 .filter-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+/* Log viewer */
 .log-viewer { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 12px; line-height: 1.6; max-height: 600px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; color: var(--text2); }
 .log-viewer .log-info { color: var(--accent); }
 .log-viewer .log-warn { color: var(--yellow); }
 .log-viewer .log-error { color: var(--red); }
 .log-viewer .log-success { color: var(--green); }
+.log-controls { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.log-controls select { width: auto; min-width: 300px; }
+
+/* Feed */
 .feed { list-style: none; }
 .feed li { padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 12px; font-size: 13px; }
 .feed li:last-child { border-bottom: none; }
 .feed .time { font-size: 12px; color: var(--text2); flex-shrink: 0; width: 80px; }
 .feed .event-name { font-weight: 500; flex-shrink: 0; width: 140px; }
+
+/* Job detail */
 .job-detail { padding: 12px 14px; background: var(--bg); border-top: 1px solid var(--border); }
 .job-detail pre { font-size: 12px; line-height: 1.5; }
 .timeline { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
@@ -81,11 +107,13 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .timeline .step.active { background: rgba(88,166,255,.15); color: var(--accent); }
 .timeline .step.ok { background: rgba(63,185,80,.15); color: var(--green); }
 .timeline .step.err { background: rgba(248,81,73,.15); color: var(--red); }
-.toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; background: var(--bg3); border: 1px solid var(--border); font-size: 13px; z-index: 100; transition: opacity .3s; }
+
+/* Toast */
+.toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; background: var(--bg3); border: 1px solid var(--border); font-size: 13px; z-index: 100; opacity: 1; transition: opacity .3s; }
 .toast.success { border-color: var(--green); color: var(--green); }
 .toast.error { border-color: var(--red); color: var(--red); }
-.log-controls { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
-.log-controls select { width: auto; min-width: 300px; }
+
+/* Notifications */
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .section-header h3 { font-size: 16px; }
 .notif-list { list-style: none; }
@@ -94,12 +122,20 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .notif-icon { flex-shrink: 0; width: 20px; text-align: center; }
 .notif-time { font-size: 11px; color: var(--text2); flex-shrink: 0; min-width: 70px; }
 .notif-event { font-weight: 500; flex-shrink: 0; min-width: 110px; }
-.file-size { font-family: monospace; font-size: 12px; color: var(--text2); }
+
+/* Settings */
 .settings-section { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
 .settings-section h4 { font-size: 14px; margin-bottom: 12px; color: var(--accent); }
 .settings-section p { font-size: 13px; color: var(--text2); margin-bottom: 12px; }
 .env-list { font-family: monospace; font-size: 12px; color: var(--text2); }
 .env-list code { background: var(--bg); padding: 2px 6px; border-radius: 4px; color: var(--yellow); }
+.file-size { font-family: monospace; font-size: 12px; color: var(--text2); }
+
+/* Loading state */
+.loading-text { color: var(--text2); font-style: italic; }
+.empty-text { color: var(--text2); text-align: center; padding: 24px; }
+
+/* Responsive */
 @media (max-width: 640px) {
   .content { padding: 12px; }
   .form-row { grid-template-columns: 1fr; }
@@ -131,7 +167,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 
 <div class="content">
 
-<!-- ダッシュボード -->
+<!-- Dashboard -->
 <div class="panel active" id="panel-dashboard">
   <div class="cards" id="status-cards">
     <div class="card"><div class="label">ステータス</div><div class="value" id="c-status">--</div><div class="sub" id="c-auth"></div></div>
@@ -143,10 +179,10 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
     <div class="card" id="gpu-card" style="display:none"><div class="label">GPU</div><div class="value" id="c-gpu" style="font-size:16px;">--</div><div class="sub" id="c-gpu-sub"></div></div>
   </div>
   <h3 style="margin-bottom:12px">最近のアクティビティ</h3>
-  <ul class="feed" id="activity-feed"><li style="color:var(--text2)">読み込み中...</li></ul>
+  <ul class="feed" id="activity-feed"><li class="loading-text">読み込み中...</li></ul>
 </div>
 
-<!-- ジョブ一覧 -->
+<!-- Jobs -->
 <div class="panel" id="panel-jobs">
   <div class="filters">
     <button class="filter-btn active" data-filter="all">すべて</button>
@@ -158,11 +194,11 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
   </div>
   <table>
     <thead><tr><th>ジョブID</th><th>リポジトリ</th><th>タスク</th><th>状態</th><th>所要時間</th><th>操作</th></tr></thead>
-    <tbody id="jobs-tbody"><tr><td colspan="6" style="color:var(--text2)">読み込み中...</td></tr></tbody>
+    <tbody id="jobs-tbody"><tr><td colspan="6" class="loading-text">読み込み中...</td></tr></tbody>
   </table>
 </div>
 
-<!-- ジョブ投入 -->
+<!-- Submit -->
 <div class="panel" id="panel-submit">
   <h3 style="margin-bottom:16px">新規ジョブ投入</h3>
   <form id="job-form" autocomplete="off">
@@ -207,7 +243,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
   </form>
 </div>
 
-<!-- ログ -->
+<!-- Logs -->
 <div class="panel" id="panel-logs">
   <div class="log-controls">
     <select id="log-job-select"><option value="">-- ジョブを選択 --</option></select>
@@ -222,20 +258,20 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
   <div class="log-viewer" id="log-output">ジョブを選択してログを表示します。</div>
 </div>
 
-<!-- 通知 -->
+<!-- Notifications -->
 <div class="panel" id="panel-notifications">
   <div class="section-header">
     <h3>通知履歴</h3>
-    <button class="btn btn-sm" onclick="loadNotifications()">更新</button>
+    <button class="btn btn-sm" id="notif-refresh-btn">更新</button>
   </div>
   <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
     <ul class="notif-list" id="notif-list">
-      <li style="color:var(--text2);justify-content:center;">読み込み中...</li>
+      <li class="loading-text" style="justify-content:center;">読み込み中...</li>
     </ul>
   </div>
 </div>
 
-<!-- 設定 -->
+<!-- Settings -->
 <div class="panel" id="panel-settings">
   <h3 style="margin-bottom:16px">設定・システム情報</h3>
 
@@ -261,7 +297,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
     <div style="margin-top:12px;">
       <table id="log-stats-table" style="font-size:12px;">
         <thead><tr><th>ファイル名</th><th>サイズ</th><th>更新日時</th></tr></thead>
-        <tbody id="log-stats-tbody"><tr><td colspan="3" style="color:var(--text2)">読み込み中...</td></tr></tbody>
+        <tbody id="log-stats-tbody"><tr><td colspan="3" class="loading-text">読み込み中...</td></tr></tbody>
       </table>
       <div style="margin-top:8px;font-size:12px;color:var(--text2);">合計: <span id="log-total-size">--</span></div>
     </div>
@@ -282,426 +318,651 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 </div>
 
 <script>
-let currentFilter = 'all';
-let statusSSE = null;
-let logSSE = null;
-let allJobs = [];
+// ===========================================================================
+// State
+// ===========================================================================
+const State = {
+  currentFilter: 'all',
+  statusSSE: null,
+  logSSE: null,
+  allJobs: [],
+  sseRetryDelay: 1000,
+  maxSseRetryDelay: 60000,
+};
 
-// ステータスの日本語マッピング
-const statusLabel = { pending: '待機中', running: '実行中', done: '完了', failed: '失敗' };
+const STATUS_LABELS = { pending: '待機中', running: '実行中', done: '完了', failed: '失敗' };
 
-document.querySelectorAll('.tab').forEach(t => {
-  t.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
-    t.classList.add('active');
-    document.getElementById('panel-' + t.dataset.tab).classList.add('active');
-    const tab = t.dataset.tab;
-    if (tab === 'jobs') loadJobs();
-    if (tab === 'logs') loadJobSelect();
-    if (tab === 'dashboard') loadDashboard();
-    if (tab === 'notifications') loadNotifications();
-    if (tab === 'settings') loadLogStats();
-  });
-});
+// ===========================================================================
+// Utilities
+// ===========================================================================
+const Utils = {
+  escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  },
 
-function toast(msg, type) {
-  const el = document.createElement('div');
-  el.className = 'toast ' + (type || '');
-  el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 400); }, 3000);
-}
+  truncate(s, n) {
+    return s && s.length > n ? s.slice(0, n) + '...' : (s || '');
+  },
 
-async function api(path, opts) {
-  const r = await fetch(path, opts);
-  if (r.status === 401) { window.location.href = '/login'; return; }
-  if (!r.ok) {
-    const e = await r.json().catch(() => ({ error: r.statusText }));
-    throw new Error(e.error || r.statusText);
-  }
-  return r;
-}
+  fmtSize(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    return (b / 1048576).toFixed(1) + ' MB';
+  },
 
-function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-function truncate(s, n) { return s.length > n ? s.slice(0, n) + '...' : s; }
-function fmtSize(b) {
-  if (b < 1024) return b + ' B';
-  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
-  return (b / 1048576).toFixed(1) + ' MB';
-}
-function fmtDuration(sec) {
-  if (sec == null) return '-';
-  if (sec < 60) return sec + '秒';
-  if (sec < 3600) return Math.floor(sec / 60) + '分' + (sec % 60) + '秒';
-  return Math.floor(sec / 3600) + '時間' + Math.floor((sec % 3600) / 60) + '分';
-}
+  fmtDuration(sec) {
+    if (sec == null) return '-';
+    if (sec < 60) return sec + '秒';
+    if (sec < 3600) return Math.floor(sec / 60) + '分' + (sec % 60) + '秒';
+    return Math.floor(sec / 3600) + '時間' + Math.floor((sec % 3600) / 60) + '分';
+  },
 
-function updateStatusUI(data) {
-  const hb = data.heartbeat || {};
-  const q = data.quota || {};
-  const c = data.counts || {};
-  const dot = document.getElementById('hb-dot');
-  const label = document.getElementById('hb-label');
-  const isAlive = hb.status === 'alive';
-  dot.className = 'dot ' + (isAlive ? 'alive' : 'dead');
-  label.textContent = isAlive ? 'エージェント稼働中' : 'エージェント停止中';
-  label.style.color = isAlive ? 'var(--green)' : 'var(--red)';
-  document.getElementById('hb-time').textContent = hb.timestamp ? new Date(hb.timestamp).toLocaleString() : '';
-  document.getElementById('c-status').textContent = hb.status === 'alive' ? '稼働中' : hb.status || '不明';
-  document.getElementById('c-auth').textContent = hb.auth ? '認証: ' + hb.auth : '';
-  const quota = hb.quota || q;
-  document.getElementById('c-quota').textContent = (quota.jobs_today ?? q.count ?? '--') + ' / ' + (quota.max_per_day ?? '--');
-  document.getElementById('c-quota-sub').textContent = q.date ? '日付: ' + q.date : '';
-  document.getElementById('c-pending').textContent = c.pending ?? '--';
-  document.getElementById('c-running').textContent = c.running ?? '--';
-  document.getElementById('c-done').textContent = c.done ?? '--';
-  document.getElementById('c-failed').textContent = c.failed ?? '--';
-  if (hb.gpu) {
-    document.getElementById('gpu-card').style.display = '';
-    document.getElementById('c-gpu').textContent = hb.gpu.name || '利用可能';
-    document.getElementById('c-gpu-sub').textContent = hb.gpu.memory || '';
-  }
-}
+  $(id) { return document.getElementById(id); },
 
-async function loadDashboard() {
-  try {
-    const r = await api('/api/status');
-    const data = await r.json();
-    updateStatusUI(data);
-  } catch(e) { console.error(e); }
-  try {
-    const gr = await api('/api/gpu');
-    const gd = await gr.json();
-    if (gd.available && gd.gpu) {
-      document.getElementById('gpu-card').style.display = '';
-      document.getElementById('c-gpu').textContent = gd.gpu.name || '利用可能';
-      document.getElementById('c-gpu-sub').textContent = gd.gpu.memory || '';
+  eventColor(evt) {
+    if (!evt) return '';
+    if (evt.includes('fail') || evt.includes('error')) return 'var(--red)';
+    if (evt.includes('success') || evt === 'job_done') return 'var(--green)';
+    if (evt.includes('start')) return 'var(--accent)';
+    return '';
+  },
+
+  timelineStepClass(evt) {
+    if (!evt) return '';
+    if (evt.includes('fail')) return 'err';
+    if (evt.includes('success') || evt === 'job_done') return 'ok';
+    if (evt.includes('start')) return 'active';
+    return '';
+  },
+
+  repoShort(repo) {
+    return (repo || '').replace(/.*\/\/github\.com\//, '').replace(/\.git$/, '');
+  },
+};
+
+// ===========================================================================
+// API Layer
+// ===========================================================================
+const Api = {
+  async fetch(path, opts) {
+    const r = await fetch(path, opts);
+    if (r.status === 401) {
+      window.location.href = '/login';
+      throw new Error('認証が必要です');
     }
-  } catch(e) {}
-  loadActivity();
-}
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({ error: r.statusText }));
+      throw new Error(e.error || r.statusText);
+    }
+    return r;
+  },
 
-async function loadActivity() {
-  try {
-    const r = await api('/api/jobs?status=all');
-    const jobs = await r.json();
-    const feed = document.getElementById('activity-feed');
-    if (!jobs.length) { feed.innerHTML = '<li style="color:var(--text2)">ジョブがありません。</li>'; return; }
-    const items = [];
-    for (const j of jobs.slice(0, 5)) {
+  async getJSON(path) {
+    const r = await this.fetch(path);
+    return r.json();
+  },
+
+  async postJSON(path, body) {
+    return this.fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  },
+
+  async del(path) {
+    return this.fetch(path, { method: 'DELETE' });
+  },
+};
+
+// ===========================================================================
+// Toast Notifications
+// ===========================================================================
+const Toast = {
+  _container: null,
+
+  _getContainer() {
+    if (!this._container) {
+      this._container = document.createElement('div');
+      this._container.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:100;display:flex;flex-direction:column;gap:8px;';
+      document.body.appendChild(this._container);
+    }
+    return this._container;
+  },
+
+  show(msg, type) {
+    const el = document.createElement('div');
+    el.className = 'toast ' + (type || '');
+    el.textContent = msg;
+    this._getContainer().appendChild(el);
+    const timer = setTimeout(() => {
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 400);
+    }, 3000);
+    el.addEventListener('click', () => {
+      clearTimeout(timer);
+      el.remove();
+    });
+  },
+};
+
+// ===========================================================================
+// Status UI
+// ===========================================================================
+const StatusUI = {
+  update(data) {
+    const hb = data.heartbeat || {};
+    const q = data.quota || {};
+    const c = data.counts || {};
+    const isAlive = hb.status === 'alive';
+
+    const dot = Utils.$('hb-dot');
+    const label = Utils.$('hb-label');
+    dot.className = 'dot ' + (isAlive ? 'alive' : 'dead');
+    label.textContent = isAlive ? 'エージェント稼働中' : 'エージェント停止中';
+    label.style.color = isAlive ? 'var(--green)' : 'var(--red)';
+
+    Utils.$('hb-time').textContent = hb.timestamp ? new Date(hb.timestamp).toLocaleString() : '';
+    Utils.$('c-status').textContent = isAlive ? '稼働中' : (hb.status || '不明');
+    Utils.$('c-auth').textContent = hb.auth ? '認証: ' + hb.auth : '';
+
+    const quota = hb.quota || q;
+    Utils.$('c-quota').textContent = (quota.jobs_today ?? q.count ?? '--') + ' / ' + (quota.max_per_day ?? '--');
+    Utils.$('c-quota-sub').textContent = q.date ? '日付: ' + q.date : '';
+
+    Utils.$('c-pending').textContent = c.pending ?? '--';
+    Utils.$('c-running').textContent = c.running ?? '--';
+    Utils.$('c-done').textContent = c.done ?? '--';
+    Utils.$('c-failed').textContent = c.failed ?? '--';
+
+    if (hb.gpu) {
+      Utils.$('gpu-card').style.display = '';
+      Utils.$('c-gpu').textContent = hb.gpu.name || '利用可能';
+      Utils.$('c-gpu-sub').textContent = hb.gpu.memory || '';
+    }
+  },
+};
+
+// ===========================================================================
+// SSE Manager (with exponential backoff reconnection)
+// ===========================================================================
+const SSE = {
+  startStatusStream() {
+    if (State.statusSSE) State.statusSSE.close();
+
+    State.statusSSE = new EventSource('/api/events/status-stream');
+
+    State.statusSSE.onmessage = (e) => {
       try {
-        const er = await fetch('/api/logs/' + j.id + '/events');
-        if (er.ok) {
-          const events = await er.json();
-          events.slice(-3).forEach(ev => items.push(ev));
-        }
-      } catch(e) {}
+        StatusUI.update(JSON.parse(e.data));
+        // Reset retry delay on successful message
+        State.sseRetryDelay = 1000;
+      } catch (ex) { /* ignore parse errors */ }
+    };
+
+    State.statusSSE.onerror = () => {
+      State.statusSSE.close();
+      State.statusSSE = null;
+      // Exponential backoff with jitter
+      const delay = State.sseRetryDelay + Math.random() * 1000;
+      State.sseRetryDelay = Math.min(State.sseRetryDelay * 2, State.maxSseRetryDelay);
+      setTimeout(() => SSE.startStatusStream(), delay);
+    };
+  },
+
+  startLogStream(jobId, viewer) {
+    this.stopLogStream();
+    viewer.textContent = '';
+
+    State.logSSE = new EventSource('/api/events/log-stream/' + jobId);
+
+    State.logSSE.onmessage = (e) => {
+      LogUI.appendLine(viewer, JSON.parse(e.data));
+    };
+
+    State.logSSE.addEventListener('done', () => {
+      LogUI.appendLine(viewer, '\n--- ストリーム終了 ---');
+      this.stopLogStream();
+    });
+
+    State.logSSE.onerror = () => {
+      this.stopLogStream();
+      // Fallback to static fetch
+      LogUI.fetchStatic(jobId);
+    };
+  },
+
+  stopLogStream() {
+    if (State.logSSE) {
+      State.logSSE.close();
+      State.logSSE = null;
     }
-    items.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
-    if (!items.length) { feed.innerHTML = '<li style="color:var(--text2)">イベントがありません。</li>'; return; }
-    feed.innerHTML = items.slice(0, 15).map(ev => {
-      const t = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : '';
-      const cls = ev.event?.includes('fail') || ev.event?.includes('error') ? 'color:var(--red)' :
-                  ev.event?.includes('success') || ev.event === 'job_done' ? 'color:var(--green)' :
-                  ev.event?.includes('start') ? 'color:var(--accent)' : '';
-      return `<li><span class="time">${t}</span><span class="event-name" style="${cls}">${ev.event || ''}</span><span style="color:var(--text2)">${escHtml(ev.job_id || '')} ${ev.detail ? '- ' + escHtml(truncate(ev.detail, 80)) : ''}</span></li>`;
+  },
+};
+
+// ===========================================================================
+// Dashboard Tab
+// ===========================================================================
+const DashboardTab = {
+  async load() {
+    try {
+      const data = await Api.getJSON('/api/status');
+      StatusUI.update(data);
+    } catch (e) {
+      console.error('Status load failed:', e);
+    }
+
+    try {
+      const gd = await Api.getJSON('/api/gpu');
+      if (gd.available && gd.gpu) {
+        Utils.$('gpu-card').style.display = '';
+        Utils.$('c-gpu').textContent = gd.gpu.name || '利用可能';
+        Utils.$('c-gpu-sub').textContent = gd.gpu.memory || '';
+      }
+    } catch (e) { /* GPU info is optional */ }
+
+    this.loadActivity();
+  },
+
+  async loadActivity() {
+    const feed = Utils.$('activity-feed');
+    try {
+      // Single batch call instead of N+1 calls
+      const items = await Api.getJSON('/api/activity?limit=15');
+      if (!items.length) {
+        feed.innerHTML = '<li class="empty-text">イベントがありません。</li>';
+        return;
+      }
+      feed.innerHTML = items.map(ev => {
+        const t = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : '';
+        const color = Utils.eventColor(ev.event);
+        const styleAttr = color ? ` style="color:${color}"` : '';
+        return `<li>
+          <span class="time">${t}</span>
+          <span class="event-name"${styleAttr}>${Utils.escHtml(ev.event || '')}</span>
+          <span style="color:var(--text2)">${Utils.escHtml(ev.job_id || '')} ${ev.detail ? '- ' + Utils.escHtml(Utils.truncate(ev.detail, 80)) : ''}</span>
+        </li>`;
+      }).join('');
+    } catch (e) {
+      feed.innerHTML = `<li style="color:var(--red)">${Utils.escHtml(e.message)}</li>`;
+    }
+  },
+};
+
+// ===========================================================================
+// Jobs Tab
+// ===========================================================================
+const JobsTab = {
+  async load() {
+    const url = State.currentFilter === 'all' ? '/api/jobs' : '/api/jobs?status=' + State.currentFilter;
+    try {
+      // Server now enriches with duration_sec - no N+1 calls needed
+      State.allJobs = await Api.getJSON(url);
+      this.applySearch();
+    } catch (e) {
+      Toast.show(e.message, 'error');
+    }
+  },
+
+  applySearch() {
+    const q = (Utils.$('job-search').value || '').toLowerCase().trim();
+    const filtered = q
+      ? State.allJobs.filter(j =>
+          (j.repo || '').toLowerCase().includes(q) ||
+          (j.task || '').toLowerCase().includes(q) ||
+          (j.id || '').toLowerCase().includes(q))
+      : State.allJobs;
+    this.render(filtered);
+  },
+
+  render(jobs) {
+    const tbody = Utils.$('jobs-tbody');
+    if (!jobs.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-text">ジョブが見つかりません。</td></tr>';
+      return;
+    }
+    // Duration is already enriched server-side - no extra API calls
+    tbody.innerHTML = jobs.map(j => {
+      const repo = Utils.repoShort(j.repo);
+      const task = Utils.truncate(j.task, 60);
+      const durText = Utils.fmtDuration(j.duration_sec);
+      const canRerun = j.status === 'done' || j.status === 'failed';
+      const sl = STATUS_LABELS[j.status] || j.status;
+      return `<tr data-id="${Utils.escHtml(j.id)}">
+        <td style="font-family:monospace;font-size:12px;white-space:nowrap;">${Utils.escHtml(j.id)}</td>
+        <td>${Utils.escHtml(repo)}</td>
+        <td>${Utils.escHtml(task)}</td>
+        <td><span class="badge ${j.status}">${sl}</span></td>
+        <td style="font-size:12px;white-space:nowrap;">${durText}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm" onclick="JobsTab.toggleDetail('${j.id}')">詳細</button>
+          ${canRerun ? `<button class="btn btn-sm" onclick="JobsTab.rerun('${j.id}')" style="color:var(--accent);border-color:var(--accent);">再実行</button>` : ''}
+          ${j.status === 'pending' ? `<button class="btn btn-sm danger" onclick="JobsTab.cancel('${j.id}')">取消</button>` : ''}
+        </td>
+      </tr><tr class="detail-row" id="detail-${j.id}" style="display:none"><td colspan="6"></td></tr>`;
     }).join('');
-  } catch(e) { console.error(e); }
-}
+  },
 
-async function loadJobs() {
-  const url = currentFilter === 'all' ? '/api/jobs' : '/api/jobs?status=' + currentFilter;
-  try {
-    const r = await api(url);
-    allJobs = await r.json();
-    applySearch();
-  } catch(e) { toast(e.message, 'error'); }
-}
+  async toggleDetail(id) {
+    const row = Utils.$('detail-' + id);
+    if (row.style.display !== 'none') { row.style.display = 'none'; return; }
+    row.style.display = '';
+    const cell = row.querySelector('td');
+    cell.innerHTML = '<span class="loading-text">読み込み中...</span>';
 
-function applySearch() {
-  const q = (document.getElementById('job-search').value || '').toLowerCase().trim();
-  const filtered = q ? allJobs.filter(j =>
-    (j.repo || '').toLowerCase().includes(q) ||
-    (j.task || '').toLowerCase().includes(q) ||
-    (j.id || '').toLowerCase().includes(q)
-  ) : allJobs;
-  renderJobs(filtered);
-}
-
-let searchTimer = null;
-document.getElementById('job-search').addEventListener('input', () => {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(applySearch, 200);
-});
-
-async function renderJobs(jobs) {
-  const tbody = document.getElementById('jobs-tbody');
-  if (!jobs.length) { tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text2)">ジョブが見つかりません。</td></tr>'; return; }
-  const durations = {};
-  await Promise.all(jobs.map(async j => {
-    if (j.status === 'pending') return;
     try {
-      const dr = await fetch('/api/jobs/' + j.id + '/duration');
-      if (dr.ok) durations[j.id] = await dr.json();
-    } catch(e) {}
-  }));
-  tbody.innerHTML = jobs.map(j => {
-    const repo = (j.repo || '').replace(/.*\/\/github\.com\//, '').replace(/\.git$/, '');
-    const task = truncate(j.task || '', 60);
-    const dur = durations[j.id];
-    const durText = dur ? fmtDuration(dur.duration_sec) : '-';
-    const canRerun = j.status === 'done' || j.status === 'failed';
-    const sl = statusLabel[j.status] || j.status;
-    return `<tr data-id="${escHtml(j.id)}">
-      <td style="font-family:monospace;font-size:12px;white-space:nowrap;">${escHtml(j.id)}</td>
-      <td>${escHtml(repo)}</td>
-      <td>${escHtml(task)}</td>
-      <td><span class="badge ${j.status}">${sl}</span></td>
-      <td style="font-size:12px;white-space:nowrap;">${durText}</td>
-      <td style="white-space:nowrap;">
-        <button class="btn btn-sm" onclick="toggleDetail('${j.id}')">詳細</button>
-        ${canRerun ? `<button class="btn btn-sm" onclick="rerunJob('${j.id}')" style="color:var(--accent);border-color:var(--accent);">再実行</button>` : ''}
-        ${j.status === 'pending' ? `<button class="btn btn-sm danger" onclick="cancelJob('${j.id}')">取消</button>` : ''}
-      </td>
-    </tr><tr class="detail-row" id="detail-${j.id}" style="display:none"><td colspan="6"></td></tr>`;
-  }).join('');
-}
+      const [j, dur] = await Promise.all([
+        Api.getJSON('/api/jobs/' + id),
+        fetch('/api/jobs/' + id + '/duration').then(r => r.ok ? r.json() : null).catch(() => null),
+      ]);
 
-async function toggleDetail(id) {
-  const row = document.getElementById('detail-' + id);
-  if (row.style.display !== 'none') { row.style.display = 'none'; return; }
-  row.style.display = '';
-  const cell = row.querySelector('td');
-  cell.innerHTML = '<span style="color:var(--text2)">読み込み中...</span>';
-  try {
-    const [jr, dr] = await Promise.all([
-      api('/api/jobs/' + id),
-      fetch('/api/jobs/' + id + '/duration').then(r => r.ok ? r.json() : null).catch(() => null),
-    ]);
-    const j = await jr.json();
-    let eventsHtml = '';
-    try {
-      const er = await fetch('/api/logs/' + id + '/events');
-      if (er.ok) {
-        const events = await er.json();
+      let eventsHtml = '';
+      try {
+        const events = await Api.getJSON('/api/logs/' + id + '/events');
         eventsHtml = '<div style="margin-top:8px"><strong>タイムライン:</strong><div class="timeline">' +
           events.map(e => {
-            const cls = e.event?.includes('fail') ? 'err' : e.event?.includes('success') || e.event === 'job_done' ? 'ok' : e.event?.includes('start') ? 'active' : '';
-            return `<span class="step ${cls}">${escHtml(e.event)}</span>`;
+            const cls = Utils.timelineStepClass(e.event);
+            return `<span class="step ${cls}">${Utils.escHtml(e.event)}</span>`;
           }).join('') + '</div></div>';
+      } catch (e) { /* events are optional */ }
+
+      const prLink = j.pr_url ? `<div style="margin-top:8px"><strong>PR:</strong> <a href="${Utils.escHtml(j.pr_url)}" target="_blank" rel="noopener">${Utils.escHtml(j.pr_url)}</a></div>` : '';
+      const durInfo = dur && dur.duration_sec != null ? `<div style="margin-top:8px"><strong>所要時間:</strong> ${Utils.fmtDuration(dur.duration_sec)} (${dur.start} - ${dur.end})</div>` : '';
+      const canRerun = j.status === 'done' || j.status === 'failed';
+
+      cell.innerHTML = `<div class="job-detail">
+        <pre>${Utils.escHtml(JSON.stringify({repo:j.repo, base_ref:j.base_ref, work_branch:j.work_branch, task:j.task, commands:j.commands, time_budget_sec:j.time_budget_sec, gpu_required:j.gpu_required, created_at:j.created_at}, null, 2))}</pre>
+        ${prLink}${durInfo}${eventsHtml}
+        <div style="margin-top:8px;display:flex;gap:8px;">
+          <button class="btn btn-sm" onclick="LogUI.viewJobLog('${id}')">ログを表示</button>
+          ${canRerun ? `<button class="btn btn-sm" onclick="JobsTab.rerun('${id}')" style="color:var(--accent);border-color:var(--accent);">再実行</button>` : ''}
+        </div>
+      </div>`;
+    } catch (e) {
+      cell.innerHTML = `<span style="color:var(--red)">${Utils.escHtml(e.message)}</span>`;
+    }
+  },
+
+  async cancel(id) {
+    if (!confirm('待機中のジョブ ' + id + ' を取り消しますか？')) return;
+    try {
+      await Api.del('/api/jobs/' + id);
+      Toast.show('ジョブを取り消しました', 'success');
+      this.load();
+    } catch (e) { Toast.show(e.message, 'error'); }
+  },
+
+  async rerun(id) {
+    if (!confirm('ジョブ ' + id + ' を再実行しますか？\n同じ設定で新しいジョブが作成されます。')) return;
+    try {
+      const r = await Api.fetch('/api/jobs/' + id + '/rerun', { method: 'POST' });
+      const j = await r.json();
+      Toast.show('再実行ジョブを投入しました: ' + j.id, 'success');
+      this.load();
+    } catch (e) { Toast.show(e.message, 'error'); }
+  },
+};
+
+// ===========================================================================
+// Submit Tab
+// ===========================================================================
+const SubmitTab = {
+  init() {
+    Utils.$('job-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = Utils.$('submit-msg');
+      const btn = e.target.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      msg.textContent = '投入中...';
+      msg.style.color = 'var(--text2)';
+
+      try {
+        const r = await Api.postJSON('/api/jobs', {
+          repo: Utils.$('f-repo').value.trim(),
+          task: Utils.$('f-task').value.trim(),
+          base_ref: Utils.$('f-base').value.trim() || 'main',
+          time_budget: parseInt(Utils.$('f-budget').value) || 3600,
+          setup: Utils.$('f-setup').value,
+          test: Utils.$('f-test').value,
+          max_retries: parseInt(Utils.$('f-retries').value) || 2,
+          gpu_required: Utils.$('f-gpu').checked,
+        });
+        const j = await r.json();
+        msg.textContent = 'ジョブ作成完了: ' + j.id;
+        msg.style.color = 'var(--green)';
+        Toast.show('ジョブを投入しました', 'success');
+        Utils.$('f-task').value = '';
+        Utils.$('f-setup').value = '';
+        Utils.$('f-test').value = '';
+      } catch (e) {
+        msg.textContent = e.message;
+        msg.style.color = 'var(--red)';
+        Toast.show(e.message, 'error');
       }
-    } catch(e) {}
-    const prLink = j.pr_url ? `<div style="margin-top:8px"><strong>PR:</strong> <a href="${escHtml(j.pr_url)}" target="_blank">${escHtml(j.pr_url)}</a></div>` : '';
-    const durInfo = dr && dr.duration_sec != null ? `<div style="margin-top:8px"><strong>所要時間:</strong> ${fmtDuration(dr.duration_sec)} (${dr.start} - ${dr.end})</div>` : '';
-    const canRerun = j.status === 'done' || j.status === 'failed';
-    cell.innerHTML = `<div class="job-detail">
-      <pre>${escHtml(JSON.stringify({repo:j.repo, base_ref:j.base_ref, work_branch:j.work_branch, task:j.task, commands:j.commands, time_budget_sec:j.time_budget_sec, gpu_required:j.gpu_required, created_at:j.created_at}, null, 2))}</pre>
-      ${prLink}${durInfo}${eventsHtml}
-      <div style="margin-top:8px;display:flex;gap:8px;">
-        <button class="btn btn-sm" onclick="viewJobLog('${id}')">ログを表示</button>
-        ${canRerun ? `<button class="btn btn-sm" onclick="rerunJob('${id}')" style="color:var(--accent);border-color:var(--accent);">再実行</button>` : ''}
-      </div>
-    </div>`;
-  } catch(e) { cell.innerHTML = '<span style="color:var(--red)">' + escHtml(e.message) + '</span>'; }
-}
-
-function viewJobLog(id) {
-  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
-  document.querySelector('[data-tab="logs"]').classList.add('active');
-  document.getElementById('panel-logs').classList.add('active');
-  loadJobSelect().then(() => {
-    const sel = document.getElementById('log-job-select');
-    sel.value = id;
-    sel.dispatchEvent(new Event('change'));
-  });
-}
-
-async function cancelJob(id) {
-  if (!confirm('待機中のジョブ ' + id + ' を取り消しますか？')) return;
-  try {
-    await api('/api/jobs/' + id, { method: 'DELETE' });
-    toast('ジョブを取り消しました', 'success');
-    loadJobs();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-async function rerunJob(id) {
-  if (!confirm('ジョブ ' + id + ' を再実行しますか？\n同じ設定で新しいジョブが作成されます。')) return;
-  try {
-    const r = await api('/api/jobs/' + id + '/rerun', { method: 'POST' });
-    const j = await r.json();
-    toast('再実行ジョブを投入しました: ' + j.id, 'success');
-    loadJobs();
-  } catch(e) { toast(e.message, 'error'); }
-}
-
-document.querySelectorAll('.filter-btn').forEach(b => {
-  b.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn').forEach(x => x.classList.remove('active'));
-    b.classList.add('active');
-    currentFilter = b.dataset.filter;
-    document.getElementById('job-search').value = '';
-    loadJobs();
-  });
-});
-
-document.getElementById('job-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const msg = document.getElementById('submit-msg');
-  const btn = e.target.querySelector('button[type="submit"]');
-  btn.disabled = true;
-  msg.textContent = '投入中...';
-  msg.style.color = 'var(--text2)';
-  try {
-    const body = {
-      repo: document.getElementById('f-repo').value.trim(),
-      task: document.getElementById('f-task').value.trim(),
-      base_ref: document.getElementById('f-base').value.trim() || 'main',
-      time_budget: parseInt(document.getElementById('f-budget').value) || 3600,
-      setup: document.getElementById('f-setup').value,
-      test: document.getElementById('f-test').value,
-      max_retries: parseInt(document.getElementById('f-retries').value) || 2,
-      gpu_required: document.getElementById('f-gpu').checked,
-    };
-    const r = await api('/api/jobs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    const j = await r.json();
-    msg.textContent = 'ジョブ作成完了: ' + j.id;
-    msg.style.color = 'var(--green)';
-    toast('ジョブを投入しました', 'success');
-    document.getElementById('f-task').value = '';
-    document.getElementById('f-setup').value = '';
-    document.getElementById('f-test').value = '';
-  } catch(e) {
-    msg.textContent = e.message;
-    msg.style.color = 'var(--red)';
-    toast(e.message, 'error');
-  }
-  btn.disabled = false;
-});
-
-async function loadJobSelect() {
-  const sel = document.getElementById('log-job-select');
-  const prev = sel.value;
-  try {
-    const r = await api('/api/jobs');
-    const jobs = await r.json();
-    sel.innerHTML = '<option value="">-- ジョブを選択 --</option>' +
-      jobs.map(j => `<option value="${j.id}">[${statusLabel[j.status] || j.status}] ${j.id}</option>`).join('');
-    if (prev) sel.value = prev;
-  } catch(e) {}
-}
-
-document.getElementById('log-job-select').addEventListener('change', function() {
-  const id = this.value;
-  document.getElementById('log-refresh-btn').disabled = !id;
-  if (logSSE) { logSSE.close(); logSSE = null; }
-  if (!id) { document.getElementById('log-output').textContent = 'ジョブを選択してログを表示します。'; return; }
-  fetchLog(id);
-});
-
-document.getElementById('log-refresh-btn').addEventListener('click', () => {
-  const id = document.getElementById('log-job-select').value;
-  if (id) fetchLog(id);
-});
-
-async function fetchLog(id) {
-  const viewer = document.getElementById('log-output');
-  viewer.textContent = '読み込み中...';
-  if (logSSE) { logSSE.close(); logSSE = null; }
-  if (document.getElementById('log-stream').checked) {
-    viewer.textContent = '';
-    logSSE = new EventSource('/api/events/log-stream/' + id);
-    logSSE.onmessage = (e) => { appendLogLine(viewer, JSON.parse(e.data)); };
-    logSSE.addEventListener('done', () => {
-      appendLogLine(viewer, '\n--- ストリーム終了 ---');
-      logSSE.close(); logSSE = null;
+      btn.disabled = false;
     });
-    logSSE.onerror = () => { logSSE.close(); logSSE = null; fetchLogStatic(id); };
-  } else {
-    fetchLogStatic(id);
-  }
-}
+  },
+};
 
-async function fetchLogStatic(id) {
-  const viewer = document.getElementById('log-output');
-  try {
-    const r = await fetch('/api/logs/' + id);
-    if (!r.ok) throw new Error('ログが見つかりません');
-    const text = await r.text();
-    viewer.textContent = '';
-    text.split('\n').forEach(line => appendLogLine(viewer, line));
-  } catch(e) { viewer.textContent = 'エラー: ' + e.message; }
-}
+// ===========================================================================
+// Log UI
+// ===========================================================================
+const LogUI = {
+  async loadJobSelect() {
+    const sel = Utils.$('log-job-select');
+    const prev = sel.value;
+    try {
+      const jobs = await Api.getJSON('/api/jobs?enrich=false');
+      sel.innerHTML = '<option value="">-- ジョブを選択 --</option>' +
+        jobs.map(j => `<option value="${j.id}">[${STATUS_LABELS[j.status] || j.status}] ${j.id}</option>`).join('');
+      if (prev) sel.value = prev;
+    } catch (e) { /* silently fail - log select is non-critical */ }
+  },
 
-function appendLogLine(viewer, line) {
-  const span = document.createElement('span');
-  span.textContent = line + '\n';
-  if (/\[ERROR\]|error|Error|FAIL/i.test(line)) span.className = 'log-error';
-  else if (/\[WARN\]|warn|WARNING/i.test(line)) span.className = 'log-warn';
-  else if (/\[INFO\]/i.test(line)) span.className = 'log-info';
-  else if (/success|passed|done|completed/i.test(line)) span.className = 'log-success';
-  viewer.appendChild(span);
-  if (document.getElementById('log-auto').checked) viewer.scrollTop = viewer.scrollHeight;
-}
+  init() {
+    const sel = Utils.$('log-job-select');
+    sel.addEventListener('change', () => {
+      const id = sel.value;
+      Utils.$('log-refresh-btn').disabled = !id;
+      SSE.stopLogStream();
+      if (!id) {
+        Utils.$('log-output').textContent = 'ジョブを選択してログを表示します。';
+        return;
+      }
+      this.fetchLog(id);
+    });
 
-async function loadNotifications() {
-  const list = document.getElementById('notif-list');
-  try {
-    const r = await api('/api/notifications?tail=50');
-    const items = await r.json();
-    if (!items.length) { list.innerHTML = '<li style="color:var(--text2);justify-content:center;">通知はありません。</li>'; return; }
-    const iconMap = {
-      job_start: '&#9654;&#65039;', job_done: '&#9989;', job_failed: '&#10060;',
-      circuit_breaker: '&#9888;&#65039;', stale_heartbeat: '&#128128;',
-      auth_failed: '&#128273;', quota_exceeded: '&#128202;',
-    };
-    list.innerHTML = items.reverse().map(n => {
-      const icon = iconMap[n.event] || '&#8505;&#65039;';
-      const t = n.timestamp ? new Date(n.timestamp).toLocaleString() : n.timestamp;
-      const evtColor = n.event.includes('fail') || n.event === 'circuit_breaker' || n.event === 'stale_heartbeat' ? 'var(--red)' :
-                        n.event === 'job_done' ? 'var(--green)' :
-                        n.event === 'job_start' ? 'var(--accent)' : 'var(--yellow)';
-      return `<li>
-        <span class="notif-icon">${icon}</span>
-        <span class="notif-time">${escHtml(t)}</span>
-        <span class="notif-event" style="color:${evtColor}">${escHtml(n.event)}</span>
-        <span style="color:var(--text2);font-family:monospace;font-size:12px;">${escHtml(n.job_id)}</span>
-        <span style="color:var(--text2)">${escHtml(n.message || '')}</span>
-      </li>`;
-    }).join('');
-  } catch(e) { list.innerHTML = '<li style="color:var(--red)">' + escHtml(e.message) + '</li>'; }
-}
+    Utils.$('log-refresh-btn').addEventListener('click', () => {
+      const id = sel.value;
+      if (id) this.fetchLog(id);
+    });
+  },
 
-async function loadLogStats() {
-  try {
-    const r = await api('/api/admin/log-stats');
-    const data = await r.json();
-    const tbody = document.getElementById('log-stats-tbody');
-    if (!data.files.length) { tbody.innerHTML = '<tr><td colspan="3" style="color:var(--text2)">ログファイルがありません。</td></tr>'; return; }
-    tbody.innerHTML = data.files.map(f => {
-      const mod = new Date(f.modified).toLocaleString();
-      return `<tr><td style="font-family:monospace">${escHtml(f.name)}</td><td class="file-size">${fmtSize(f.size)}</td><td style="font-size:12px;color:var(--text2)">${mod}</td></tr>`;
-    }).join('');
-    document.getElementById('log-total-size').textContent = fmtSize(data.total_bytes);
-  } catch(e) { console.error(e); }
-}
+  fetchLog(id) {
+    const viewer = Utils.$('log-output');
+    viewer.textContent = '読み込み中...';
+    SSE.stopLogStream();
 
-function startStatusStream() {
-  if (statusSSE) statusSSE.close();
-  statusSSE = new EventSource('/api/events/status-stream');
-  statusSSE.onmessage = (e) => {
-    try { updateStatusUI(JSON.parse(e.data)); } catch(ex) {}
-  };
-  statusSSE.onerror = () => {
-    statusSSE.close(); statusSSE = null;
-    setTimeout(startStatusStream, 10000);
-  };
-}
+    if (Utils.$('log-stream').checked) {
+      SSE.startLogStream(id, viewer);
+    } else {
+      this.fetchStatic(id);
+    }
+  },
 
-loadDashboard();
-startStatusStream();
+  async fetchStatic(id) {
+    const viewer = Utils.$('log-output');
+    try {
+      const r = await fetch('/api/logs/' + id);
+      if (!r.ok) throw new Error('ログが見つかりません');
+      const text = await r.text();
+      viewer.textContent = '';
+      text.split('\n').forEach(line => this.appendLine(viewer, line));
+    } catch (e) {
+      viewer.textContent = 'エラー: ' + e.message;
+    }
+  },
+
+  appendLine(viewer, line) {
+    const span = document.createElement('span');
+    span.textContent = line + '\n';
+    if (/\[ERROR\]|error|Error|FAIL/i.test(line)) span.className = 'log-error';
+    else if (/\[WARN\]|warn|WARNING/i.test(line)) span.className = 'log-warn';
+    else if (/\[INFO\]/i.test(line)) span.className = 'log-info';
+    else if (/success|passed|done|completed/i.test(line)) span.className = 'log-success';
+    viewer.appendChild(span);
+    if (Utils.$('log-auto').checked) viewer.scrollTop = viewer.scrollHeight;
+  },
+
+  viewJobLog(id) {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    document.querySelector('[data-tab="logs"]').classList.add('active');
+    Utils.$('panel-logs').classList.add('active');
+    this.loadJobSelect().then(() => {
+      const sel = Utils.$('log-job-select');
+      sel.value = id;
+      sel.dispatchEvent(new Event('change'));
+    });
+  },
+};
+
+// ===========================================================================
+// Notifications Tab
+// ===========================================================================
+const NotifTab = {
+  ICON_MAP: {
+    job_start: '\u25B6\uFE0F',
+    job_done: '\u2705',
+    job_failed: '\u274C',
+    circuit_breaker: '\u26A0\uFE0F',
+    stale_heartbeat: '\uD83D\uDC80',
+    auth_failed: '\uD83D\uDD11',
+    quota_exceeded: '\uD83D\uDCCA',
+  },
+
+  async load() {
+    const list = Utils.$('notif-list');
+    try {
+      const items = await Api.getJSON('/api/notifications?tail=50');
+      if (!items.length) {
+        list.innerHTML = '<li class="empty-text" style="justify-content:center;">通知はありません。</li>';
+        return;
+      }
+      list.innerHTML = items.reverse().map(n => {
+        const icon = this.ICON_MAP[n.event] || '\u2139\uFE0F';
+        const t = n.timestamp ? new Date(n.timestamp).toLocaleString() : n.timestamp;
+        const evtColor = (n.event.includes('fail') || n.event === 'circuit_breaker' || n.event === 'stale_heartbeat')
+          ? 'var(--red)' : n.event === 'job_done' ? 'var(--green)'
+          : n.event === 'job_start' ? 'var(--accent)' : 'var(--yellow)';
+        return `<li>
+          <span class="notif-icon">${icon}</span>
+          <span class="notif-time">${Utils.escHtml(t)}</span>
+          <span class="notif-event" style="color:${evtColor}">${Utils.escHtml(n.event)}</span>
+          <span style="color:var(--text2);font-family:monospace;font-size:12px;">${Utils.escHtml(n.job_id)}</span>
+          <span style="color:var(--text2)">${Utils.escHtml(n.message || '')}</span>
+        </li>`;
+      }).join('');
+    } catch (e) {
+      list.innerHTML = `<li style="color:var(--red)">${Utils.escHtml(e.message)}</li>`;
+    }
+  },
+};
+
+// ===========================================================================
+// Settings Tab
+// ===========================================================================
+const SettingsTab = {
+  async loadLogStats() {
+    try {
+      const data = await Api.getJSON('/api/admin/log-stats');
+      const tbody = Utils.$('log-stats-tbody');
+      if (!data.files.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="empty-text">ログファイルがありません。</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.files.map(f => {
+        const mod = new Date(f.modified).toLocaleString();
+        return `<tr>
+          <td style="font-family:monospace">${Utils.escHtml(f.name)}</td>
+          <td class="file-size">${Utils.fmtSize(f.size)}</td>
+          <td style="font-size:12px;color:var(--text2)">${mod}</td>
+        </tr>`;
+      }).join('');
+      Utils.$('log-total-size').textContent = Utils.fmtSize(data.total_bytes);
+    } catch (e) {
+      console.error('Log stats load failed:', e);
+    }
+  },
+};
+
+// ===========================================================================
+// Tab Router
+// ===========================================================================
+const Router = {
+  TAB_HANDLERS: {
+    dashboard: () => DashboardTab.load(),
+    jobs: () => JobsTab.load(),
+    logs: () => LogUI.loadJobSelect(),
+    notifications: () => NotifTab.load(),
+    settings: () => SettingsTab.loadLogStats(),
+  },
+
+  init() {
+    document.querySelectorAll('.tab').forEach(t => {
+      t.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        Utils.$('panel-' + t.dataset.tab).classList.add('active');
+
+        const handler = this.TAB_HANDLERS[t.dataset.tab];
+        if (handler) handler();
+      });
+    });
+  },
+};
+
+// ===========================================================================
+// Initialization
+// ===========================================================================
+(function init() {
+  // Tab routing
+  Router.init();
+
+  // Job filters
+  document.querySelectorAll('.filter-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      State.currentFilter = b.dataset.filter;
+      Utils.$('job-search').value = '';
+      JobsTab.load();
+    });
+  });
+
+  // Debounced job search
+  let searchTimer = null;
+  Utils.$('job-search').addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => JobsTab.applySearch(), 200);
+  });
+
+  // Submit form
+  SubmitTab.init();
+
+  // Log viewer
+  LogUI.init();
+
+  // Notification refresh
+  Utils.$('notif-refresh-btn').addEventListener('click', () => NotifTab.load());
+
+  // Initial load
+  DashboardTab.load();
+  SSE.startStatusStream();
+})();
 </script>
 </body>
 </html>
