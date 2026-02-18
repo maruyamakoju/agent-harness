@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -15,48 +15,34 @@
 body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 14px; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
-
-/* Header */
 .header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
 .header h1 { font-size: 18px; font-weight: 600; }
 .header .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text2); }
 .header .dot.alive { background: var(--green); }
 .header .dot.dead { background: var(--red); }
 .header .meta { margin-left: auto; color: var(--text2); font-size: 12px; display: flex; align-items: center; gap: 12px; }
-
-/* Tabs */
 .tabs { display: flex; background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 24px; overflow-x: auto; }
 .tab { padding: 10px 20px; cursor: pointer; color: var(--text2); border-bottom: 2px solid transparent; font-size: 14px; transition: color .15s; white-space: nowrap; }
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--text); border-bottom-color: var(--accent); }
-
-/* Content */
 .content { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .panel { display: none; }
 .panel.active { display: block; }
-
-/* Cards */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 24px; }
 .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
-.card .label { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+.card .label { font-size: 12px; color: var(--text2); letter-spacing: .5px; margin-bottom: 4px; }
 .card .value { font-size: 28px; font-weight: 600; }
 .card .sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
-
-/* Tables */
 table { width: 100%; border-collapse: collapse; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-th { text-align: left; padding: 10px 14px; background: var(--bg3); color: var(--text2); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--border); }
+th { text-align: left; padding: 10px 14px; background: var(--bg3); color: var(--text2); font-size: 12px; letter-spacing: .5px; border-bottom: 1px solid var(--border); }
 td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: top; }
 tr:last-child td { border-bottom: none; }
 tr:hover td { background: rgba(88,166,255,.04); }
-
-/* Status badges */
 .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
 .badge.pending  { background: rgba(210,153,34,.15); color: var(--yellow); }
 .badge.running  { background: rgba(88,166,255,.15); color: var(--accent); }
 .badge.done     { background: rgba(63,185,80,.15); color: var(--green); }
 .badge.failed   { background: rgba(248,81,73,.15); color: var(--red); }
-
-/* Forms */
 .form-group { margin-bottom: 16px; }
 .form-group label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--text2); }
 input[type="text"], input[type="number"], textarea, select {
@@ -66,8 +52,6 @@ input[type="text"], input[type="number"], textarea, select {
 textarea { min-height: 80px; resize: vertical; }
 input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-
-/* Buttons */
 .btn { display: inline-block; padding: 8px 18px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg3); color: var(--text); cursor: pointer; font-size: 14px; font-family: inherit; transition: background .15s; }
 .btn:hover { background: var(--border); }
 .btn.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
@@ -76,28 +60,20 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .btn.danger:hover { background: rgba(248,81,73,.1); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn-sm { padding: 2px 10px; font-size: 12px; }
-
-/* Filters */
 .filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .filter-btn { padding: 4px 14px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text2); cursor: pointer; font-size: 13px; transition: all .15s; }
 .filter-btn:hover { border-color: var(--text2); }
 .filter-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
-
-/* Log viewer */
 .log-viewer { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 12px; line-height: 1.6; max-height: 600px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; color: var(--text2); }
 .log-viewer .log-info { color: var(--accent); }
 .log-viewer .log-warn { color: var(--yellow); }
 .log-viewer .log-error { color: var(--red); }
 .log-viewer .log-success { color: var(--green); }
-
-/* Activity feed */
 .feed { list-style: none; }
 .feed li { padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 12px; font-size: 13px; }
 .feed li:last-child { border-bottom: none; }
 .feed .time { font-size: 12px; color: var(--text2); flex-shrink: 0; width: 80px; }
 .feed .event-name { font-weight: 500; flex-shrink: 0; width: 140px; }
-
-/* Job detail */
 .job-detail { padding: 12px 14px; background: var(--bg); border-top: 1px solid var(--border); }
 .job-detail pre { font-size: 12px; line-height: 1.5; }
 .timeline { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
@@ -105,39 +81,25 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .timeline .step.active { background: rgba(88,166,255,.15); color: var(--accent); }
 .timeline .step.ok { background: rgba(63,185,80,.15); color: var(--green); }
 .timeline .step.err { background: rgba(248,81,73,.15); color: var(--red); }
-
-/* Toast */
 .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; background: var(--bg3); border: 1px solid var(--border); font-size: 13px; z-index: 100; transition: opacity .3s; }
 .toast.success { border-color: var(--green); color: var(--green); }
 .toast.error { border-color: var(--red); color: var(--red); }
-
-/* Log controls */
 .log-controls { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
 .log-controls select { width: auto; min-width: 300px; }
-
-/* Section headers */
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .section-header h3 { font-size: 16px; }
-
-/* Notification list */
 .notif-list { list-style: none; }
 .notif-list li { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: baseline; font-size: 13px; }
 .notif-list li:last-child { border-bottom: none; }
 .notif-icon { flex-shrink: 0; width: 20px; text-align: center; }
 .notif-time { font-size: 11px; color: var(--text2); flex-shrink: 0; min-width: 70px; }
 .notif-event { font-weight: 500; flex-shrink: 0; min-width: 110px; }
-
-/* Log file table */
 .file-size { font-family: monospace; font-size: 12px; color: var(--text2); }
-
-/* Settings sections */
 .settings-section { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
 .settings-section h4 { font-size: 14px; margin-bottom: 12px; color: var(--accent); }
 .settings-section p { font-size: 13px; color: var(--text2); margin-bottom: 12px; }
 .env-list { font-family: monospace; font-size: 12px; color: var(--text2); }
 .env-list code { background: var(--bg); padding: 2px 6px; border-radius: 4px; color: var(--yellow); }
-
-/* Responsive */
 @media (max-width: 640px) {
   .content { padding: 12px; }
   .form-row { grid-template-columns: 1fr; }
@@ -148,191 +110,186 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 </head>
 <body>
 
-<!-- Header -->
 <div class="header">
   <h1>Agent Dashboard</h1>
   <span class="dot" id="hb-dot"></span>
-  <span id="hb-label" style="font-size:13px;color:var(--text2)">connecting...</span>
+  <span id="hb-label" style="font-size:13px;color:var(--text2)">接続中...</span>
   <span class="meta">
     <span id="hb-time"></span>
-    <a href="/logout" style="font-size:12px;color:var(--text2);">Logout</a>
+    <a href="/logout" style="font-size:12px;color:var(--text2);">ログアウト</a>
   </span>
 </div>
 
-<!-- Tabs -->
 <div class="tabs">
-  <div class="tab active" data-tab="dashboard">Dashboard</div>
-  <div class="tab" data-tab="jobs">Jobs</div>
-  <div class="tab" data-tab="submit">Submit Job</div>
-  <div class="tab" data-tab="logs">Logs</div>
-  <div class="tab" data-tab="notifications">Notifications</div>
-  <div class="tab" data-tab="settings">Settings</div>
+  <div class="tab active" data-tab="dashboard">ダッシュボード</div>
+  <div class="tab" data-tab="jobs">ジョブ一覧</div>
+  <div class="tab" data-tab="submit">ジョブ投入</div>
+  <div class="tab" data-tab="logs">ログ</div>
+  <div class="tab" data-tab="notifications">通知</div>
+  <div class="tab" data-tab="settings">設定</div>
 </div>
 
 <div class="content">
 
-<!-- ======================== Dashboard Panel ======================== -->
+<!-- ダッシュボード -->
 <div class="panel active" id="panel-dashboard">
   <div class="cards" id="status-cards">
-    <div class="card"><div class="label">Status</div><div class="value" id="c-status">--</div><div class="sub" id="c-auth"></div></div>
-    <div class="card"><div class="label">Jobs Today</div><div class="value" id="c-quota">--</div><div class="sub" id="c-quota-sub"></div></div>
-    <div class="card"><div class="label">Pending</div><div class="value" id="c-pending">--</div></div>
-    <div class="card"><div class="label">Running</div><div class="value" id="c-running">--</div></div>
-    <div class="card"><div class="label">Done</div><div class="value" id="c-done">--</div></div>
-    <div class="card"><div class="label">Failed</div><div class="value" id="c-failed">--</div></div>
+    <div class="card"><div class="label">ステータス</div><div class="value" id="c-status">--</div><div class="sub" id="c-auth"></div></div>
+    <div class="card"><div class="label">本日のジョブ</div><div class="value" id="c-quota">--</div><div class="sub" id="c-quota-sub"></div></div>
+    <div class="card"><div class="label">待機中</div><div class="value" id="c-pending">--</div></div>
+    <div class="card"><div class="label">実行中</div><div class="value" id="c-running">--</div></div>
+    <div class="card"><div class="label">完了</div><div class="value" id="c-done">--</div></div>
+    <div class="card"><div class="label">失敗</div><div class="value" id="c-failed">--</div></div>
     <div class="card" id="gpu-card" style="display:none"><div class="label">GPU</div><div class="value" id="c-gpu" style="font-size:16px;">--</div><div class="sub" id="c-gpu-sub"></div></div>
   </div>
-  <h3 style="margin-bottom:12px">Recent Activity</h3>
-  <ul class="feed" id="activity-feed"><li style="color:var(--text2)">Loading...</li></ul>
+  <h3 style="margin-bottom:12px">最近のアクティビティ</h3>
+  <ul class="feed" id="activity-feed"><li style="color:var(--text2)">読み込み中...</li></ul>
 </div>
 
-<!-- ======================== Jobs Panel ======================== -->
+<!-- ジョブ一覧 -->
 <div class="panel" id="panel-jobs">
   <div class="filters">
-    <button class="filter-btn active" data-filter="all">All</button>
-    <button class="filter-btn" data-filter="pending">Pending</button>
-    <button class="filter-btn" data-filter="running">Running</button>
-    <button class="filter-btn" data-filter="done">Done</button>
-    <button class="filter-btn" data-filter="failed">Failed</button>
-    <input type="text" id="job-search" placeholder="Search repo or task..." style="width:auto;min-width:220px;padding:4px 12px;font-size:13px;border-radius:20px;">
+    <button class="filter-btn active" data-filter="all">すべて</button>
+    <button class="filter-btn" data-filter="pending">待機中</button>
+    <button class="filter-btn" data-filter="running">実行中</button>
+    <button class="filter-btn" data-filter="done">完了</button>
+    <button class="filter-btn" data-filter="failed">失敗</button>
+    <input type="text" id="job-search" placeholder="リポジトリ・タスクで検索..." style="width:auto;min-width:220px;padding:4px 12px;font-size:13px;border-radius:20px;">
   </div>
   <table>
-    <thead><tr><th>Job ID</th><th>Repo</th><th>Task</th><th>Status</th><th>Duration</th><th>Actions</th></tr></thead>
-    <tbody id="jobs-tbody"><tr><td colspan="6" style="color:var(--text2)">Loading...</td></tr></tbody>
+    <thead><tr><th>ジョブID</th><th>リポジトリ</th><th>タスク</th><th>状態</th><th>所要時間</th><th>操作</th></tr></thead>
+    <tbody id="jobs-tbody"><tr><td colspan="6" style="color:var(--text2)">読み込み中...</td></tr></tbody>
   </table>
 </div>
 
-<!-- ======================== Submit Panel ======================== -->
+<!-- ジョブ投入 -->
 <div class="panel" id="panel-submit">
-  <h3 style="margin-bottom:16px">Submit New Job</h3>
+  <h3 style="margin-bottom:16px">新規ジョブ投入</h3>
   <form id="job-form" autocomplete="off">
     <div class="form-group">
-      <label for="f-repo">Repository URL *</label>
+      <label for="f-repo">リポジトリURL *</label>
       <input type="text" id="f-repo" placeholder="https://github.com/org/repo.git" required>
     </div>
     <div class="form-group">
-      <label for="f-task">Task Description *</label>
-      <textarea id="f-task" placeholder="Describe what the agent should do..." required></textarea>
+      <label for="f-task">タスク内容 *</label>
+      <textarea id="f-task" placeholder="エージェントに実行させたいタスクを記述..." required></textarea>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label for="f-base">Base Branch</label>
+        <label for="f-base">ベースブランチ</label>
         <input type="text" id="f-base" value="main">
       </div>
       <div class="form-group">
-        <label for="f-budget">Time Budget (seconds)</label>
+        <label for="f-budget">制限時間（秒）</label>
         <input type="number" id="f-budget" value="3600" min="300" max="36000">
       </div>
     </div>
     <div class="form-group">
-      <label for="f-setup">Setup Commands (one per line)</label>
+      <label for="f-setup">セットアップコマンド（1行に1つ）</label>
       <textarea id="f-setup" placeholder="npm ci&#10;npx prisma migrate dev" rows="3"></textarea>
     </div>
     <div class="form-group">
-      <label for="f-test">Test Commands (one per line)</label>
+      <label for="f-test">テストコマンド（1行に1つ）</label>
       <textarea id="f-test" placeholder="npm test" rows="3"></textarea>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label for="f-retries">Max Retries</label>
+        <label for="f-retries">最大リトライ回数</label>
         <input type="number" id="f-retries" value="2" min="0" max="5">
       </div>
       <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;padding-bottom:4px;">
         <input type="checkbox" id="f-gpu" style="width:auto;">
-        <label for="f-gpu" style="margin:0;cursor:pointer;">GPU Required</label>
+        <label for="f-gpu" style="margin:0;cursor:pointer;">GPU必須</label>
       </div>
     </div>
-    <button type="submit" class="btn primary">Submit Job</button>
+    <button type="submit" class="btn primary">ジョブを投入</button>
     <span id="submit-msg" style="margin-left:12px;font-size:13px;"></span>
   </form>
 </div>
 
-<!-- ======================== Logs Panel ======================== -->
+<!-- ログ -->
 <div class="panel" id="panel-logs">
   <div class="log-controls">
-    <select id="log-job-select"><option value="">-- Select a job --</option></select>
-    <button class="btn btn-sm" id="log-refresh-btn" disabled>Refresh</button>
+    <select id="log-job-select"><option value="">-- ジョブを選択 --</option></select>
+    <button class="btn btn-sm" id="log-refresh-btn" disabled>更新</button>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;">
-      <input type="checkbox" id="log-auto" checked style="width:auto;"> Auto-scroll
+      <input type="checkbox" id="log-auto" checked style="width:auto;"> 自動スクロール
     </label>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;">
-      <input type="checkbox" id="log-stream" checked style="width:auto;"> Live stream
+      <input type="checkbox" id="log-stream" checked style="width:auto;"> リアルタイム
     </label>
   </div>
-  <div class="log-viewer" id="log-output">Select a job to view logs.</div>
+  <div class="log-viewer" id="log-output">ジョブを選択してログを表示します。</div>
 </div>
 
-<!-- ======================== Notifications Panel ======================== -->
+<!-- 通知 -->
 <div class="panel" id="panel-notifications">
   <div class="section-header">
-    <h3>Notification History</h3>
-    <button class="btn btn-sm" onclick="loadNotifications()">Refresh</button>
+    <h3>通知履歴</h3>
+    <button class="btn btn-sm" onclick="loadNotifications()">更新</button>
   </div>
   <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
     <ul class="notif-list" id="notif-list">
-      <li style="color:var(--text2);justify-content:center;">Loading...</li>
+      <li style="color:var(--text2);justify-content:center;">読み込み中...</li>
     </ul>
   </div>
 </div>
 
-<!-- ======================== Settings Panel ======================== -->
+<!-- 設定 -->
 <div class="panel" id="panel-settings">
-  <h3 style="margin-bottom:16px">Settings & System Info</h3>
+  <h3 style="margin-bottom:16px">設定・システム情報</h3>
 
-  <!-- Notification Config Info -->
   <div class="settings-section">
-    <h4>Notification Channels</h4>
-    <p>Configure notification channels via environment variables in your <code>.env</code> file.</p>
+    <h4>通知チャンネル</h4>
+    <p><code>.env</code> ファイルで通知チャンネルを設定できます。</p>
     <div class="env-list">
-      <p><code>TELEGRAM_BOT_TOKEN</code> + <code>TELEGRAM_CHAT_ID</code> - Telegram notifications</p>
-      <p><code>DISCORD_WEBHOOK_URL</code> - Discord webhook notifications</p>
-      <p><code>WEBHOOK_URL</code> - Generic / Slack-compatible webhook</p>
+      <p><code>TELEGRAM_BOT_TOKEN</code> + <code>TELEGRAM_CHAT_ID</code> - Telegram通知</p>
+      <p><code>DISCORD_WEBHOOK_URL</code> - Discord Webhook通知</p>
+      <p><code>WEBHOOK_URL</code> - 汎用 / Slack互換Webhook</p>
     </div>
-    <p style="margin-top:12px;">The agent sends notifications for: job_start, job_done, job_failed, circuit_breaker, stale_heartbeat, auth_failed, quota_exceeded.</p>
+    <p style="margin-top:12px;">通知イベント: job_start, job_done, job_failed, circuit_breaker, stale_heartbeat, auth_failed, quota_exceeded</p>
   </div>
 
-  <!-- Auth Info -->
   <div class="settings-section">
-    <h4>Dashboard Authentication</h4>
-    <p>Set <code>DASHBOARD_TOKEN</code> in your <code>.env</code> to enable token-based auth. When set, all routes require authentication via browser cookie or <code>Authorization: Bearer &lt;token&gt;</code> header.</p>
+    <h4>ダッシュボード認証</h4>
+    <p><code>.env</code> に <code>DASHBOARD_TOKEN</code> を設定するとトークン認証が有効になります。Cookie または <code>Authorization: Bearer &lt;token&gt;</code> ヘッダーで認証できます。</p>
   </div>
 
-  <!-- Log Stats -->
   <div class="settings-section">
-    <h4>Log File Management</h4>
-    <p>Log files are automatically rotated by <code>cleanup.sh</code> (logs &gt;7 days compressed, &gt;30 days deleted). Below are current log files:</p>
+    <h4>ログファイル管理</h4>
+    <p><code>cleanup.sh</code> により自動ローテーション（7日以上で圧縮、30日以上で削除）されます。現在のログファイル：</p>
     <div style="margin-top:12px;">
       <table id="log-stats-table" style="font-size:12px;">
-        <thead><tr><th>File</th><th>Size</th><th>Modified</th></tr></thead>
-        <tbody id="log-stats-tbody"><tr><td colspan="3" style="color:var(--text2)">Loading...</td></tr></tbody>
+        <thead><tr><th>ファイル名</th><th>サイズ</th><th>更新日時</th></tr></thead>
+        <tbody id="log-stats-tbody"><tr><td colspan="3" style="color:var(--text2)">読み込み中...</td></tr></tbody>
       </table>
-      <div style="margin-top:8px;font-size:12px;color:var(--text2);">Total: <span id="log-total-size">--</span></div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text2);">合計: <span id="log-total-size">--</span></div>
     </div>
   </div>
 
-  <!-- Agent Config -->
   <div class="settings-section">
-    <h4>Agent Configuration</h4>
+    <h4>エージェント設定</h4>
     <div class="env-list">
-      <p><code>MAX_JOBS_PER_DAY</code> - Daily quota limit (default: 20)</p>
-      <p><code>JOB_COOLDOWN</code> - Seconds between jobs (default: 60)</p>
-      <p><code>DEFAULT_MODEL</code> - Claude model for coding (default: claude-sonnet-4-5-20250929)</p>
-      <p><code>POLL_INTERVAL</code> - Job queue poll interval in seconds (default: 30)</p>
-      <p><code>AGENT_WATCH_REPOS</code> - GitHub repos to watch for "agent" labeled issues</p>
+      <p><code>MAX_JOBS_PER_DAY</code> - 1日あたりのジョブ上限（デフォルト: 20）</p>
+      <p><code>JOB_COOLDOWN</code> - ジョブ間のクールダウン秒数（デフォルト: 60）</p>
+      <p><code>DEFAULT_MODEL</code> - コーディング用Claudeモデル（デフォルト: claude-sonnet-4-5-20250929）</p>
+      <p><code>POLL_INTERVAL</code> - ジョブキューのポーリング間隔（デフォルト: 30秒）</p>
+      <p><code>AGENT_WATCH_REPOS</code> - "agent"ラベルのIssueを監視するGitHubリポジトリ</p>
     </div>
   </div>
 </div>
 
-</div><!-- /content -->
+</div>
 
 <script>
-// ===== State =====
 let currentFilter = 'all';
 let statusSSE = null;
 let logSSE = null;
-let allJobs = []; // cached for search
+let allJobs = [];
 
-// ===== Tabs =====
+// ステータスの日本語マッピング
+const statusLabel = { pending: '待機中', running: '実行中', done: '完了', failed: '失敗' };
+
 document.querySelectorAll('.tab').forEach(t => {
   t.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
@@ -348,7 +305,6 @@ document.querySelectorAll('.tab').forEach(t => {
   });
 });
 
-// ===== Toast =====
 function toast(msg, type) {
   const el = document.createElement('div');
   el.className = 'toast ' + (type || '');
@@ -357,7 +313,6 @@ function toast(msg, type) {
   setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 400); }, 3000);
 }
 
-// ===== Fetch helper =====
 async function api(path, opts) {
   const r = await fetch(path, opts);
   if (r.status === 401) { window.location.href = '/login'; return; }
@@ -368,7 +323,6 @@ async function api(path, opts) {
   return r;
 }
 
-// ===== Utility =====
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function truncate(s, n) { return s.length > n ? s.slice(0, n) + '...' : s; }
 function fmtSize(b) {
@@ -378,12 +332,11 @@ function fmtSize(b) {
 }
 function fmtDuration(sec) {
   if (sec == null) return '-';
-  if (sec < 60) return sec + 's';
-  if (sec < 3600) return Math.floor(sec / 60) + 'm ' + (sec % 60) + 's';
-  return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm';
+  if (sec < 60) return sec + '秒';
+  if (sec < 3600) return Math.floor(sec / 60) + '分' + (sec % 60) + '秒';
+  return Math.floor(sec / 3600) + '時間' + Math.floor((sec % 3600) / 60) + '分';
 }
 
-// ===== Dashboard =====
 function updateStatusUI(data) {
   const hb = data.heartbeat || {};
   const q = data.quota || {};
@@ -392,22 +345,21 @@ function updateStatusUI(data) {
   const label = document.getElementById('hb-label');
   const isAlive = hb.status === 'alive';
   dot.className = 'dot ' + (isAlive ? 'alive' : 'dead');
-  label.textContent = isAlive ? 'Agent running' : 'Agent offline';
+  label.textContent = isAlive ? 'エージェント稼働中' : 'エージェント停止中';
   label.style.color = isAlive ? 'var(--green)' : 'var(--red)';
   document.getElementById('hb-time').textContent = hb.timestamp ? new Date(hb.timestamp).toLocaleString() : '';
-  document.getElementById('c-status').textContent = hb.status || 'unknown';
-  document.getElementById('c-auth').textContent = hb.auth ? 'Auth: ' + hb.auth : '';
+  document.getElementById('c-status').textContent = hb.status === 'alive' ? '稼働中' : hb.status || '不明';
+  document.getElementById('c-auth').textContent = hb.auth ? '認証: ' + hb.auth : '';
   const quota = hb.quota || q;
   document.getElementById('c-quota').textContent = (quota.jobs_today ?? q.count ?? '--') + ' / ' + (quota.max_per_day ?? '--');
-  document.getElementById('c-quota-sub').textContent = q.date ? 'Date: ' + q.date : '';
+  document.getElementById('c-quota-sub').textContent = q.date ? '日付: ' + q.date : '';
   document.getElementById('c-pending').textContent = c.pending ?? '--';
   document.getElementById('c-running').textContent = c.running ?? '--';
   document.getElementById('c-done').textContent = c.done ?? '--';
   document.getElementById('c-failed').textContent = c.failed ?? '--';
-  // GPU info from heartbeat
   if (hb.gpu) {
     document.getElementById('gpu-card').style.display = '';
-    document.getElementById('c-gpu').textContent = hb.gpu.name || 'Available';
+    document.getElementById('c-gpu').textContent = hb.gpu.name || '利用可能';
     document.getElementById('c-gpu-sub').textContent = hb.gpu.memory || '';
   }
 }
@@ -418,13 +370,12 @@ async function loadDashboard() {
     const data = await r.json();
     updateStatusUI(data);
   } catch(e) { console.error(e); }
-  // Also try dedicated GPU endpoint
   try {
     const gr = await api('/api/gpu');
     const gd = await gr.json();
     if (gd.available && gd.gpu) {
       document.getElementById('gpu-card').style.display = '';
-      document.getElementById('c-gpu').textContent = gd.gpu.name || 'Available';
+      document.getElementById('c-gpu').textContent = gd.gpu.name || '利用可能';
       document.getElementById('c-gpu-sub').textContent = gd.gpu.memory || '';
     }
   } catch(e) {}
@@ -436,7 +387,7 @@ async function loadActivity() {
     const r = await api('/api/jobs?status=all');
     const jobs = await r.json();
     const feed = document.getElementById('activity-feed');
-    if (!jobs.length) { feed.innerHTML = '<li style="color:var(--text2)">No jobs yet.</li>'; return; }
+    if (!jobs.length) { feed.innerHTML = '<li style="color:var(--text2)">ジョブがありません。</li>'; return; }
     const items = [];
     for (const j of jobs.slice(0, 5)) {
       try {
@@ -448,7 +399,7 @@ async function loadActivity() {
       } catch(e) {}
     }
     items.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
-    if (!items.length) { feed.innerHTML = '<li style="color:var(--text2)">No events found.</li>'; return; }
+    if (!items.length) { feed.innerHTML = '<li style="color:var(--text2)">イベントがありません。</li>'; return; }
     feed.innerHTML = items.slice(0, 15).map(ev => {
       const t = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : '';
       const cls = ev.event?.includes('fail') || ev.event?.includes('error') ? 'color:var(--red)' :
@@ -459,7 +410,6 @@ async function loadActivity() {
   } catch(e) { console.error(e); }
 }
 
-// ===== Jobs =====
 async function loadJobs() {
   const url = currentFilter === 'all' ? '/api/jobs' : '/api/jobs?status=' + currentFilter;
   try {
@@ -479,7 +429,6 @@ function applySearch() {
   renderJobs(filtered);
 }
 
-// Debounced search
 let searchTimer = null;
 document.getElementById('job-search').addEventListener('input', () => {
   clearTimeout(searchTimer);
@@ -488,9 +437,7 @@ document.getElementById('job-search').addEventListener('input', () => {
 
 async function renderJobs(jobs) {
   const tbody = document.getElementById('jobs-tbody');
-  if (!jobs.length) { tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text2)">No jobs found.</td></tr>'; return; }
-
-  // Fetch durations in parallel
+  if (!jobs.length) { tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text2)">ジョブが見つかりません。</td></tr>'; return; }
   const durations = {};
   await Promise.all(jobs.map(async j => {
     if (j.status === 'pending') return;
@@ -499,23 +446,23 @@ async function renderJobs(jobs) {
       if (dr.ok) durations[j.id] = await dr.json();
     } catch(e) {}
   }));
-
   tbody.innerHTML = jobs.map(j => {
     const repo = (j.repo || '').replace(/.*\/\/github\.com\//, '').replace(/\.git$/, '');
     const task = truncate(j.task || '', 60);
     const dur = durations[j.id];
     const durText = dur ? fmtDuration(dur.duration_sec) : '-';
     const canRerun = j.status === 'done' || j.status === 'failed';
+    const sl = statusLabel[j.status] || j.status;
     return `<tr data-id="${escHtml(j.id)}">
       <td style="font-family:monospace;font-size:12px;white-space:nowrap;">${escHtml(j.id)}</td>
       <td>${escHtml(repo)}</td>
       <td>${escHtml(task)}</td>
-      <td><span class="badge ${j.status}">${j.status}</span></td>
+      <td><span class="badge ${j.status}">${sl}</span></td>
       <td style="font-size:12px;white-space:nowrap;">${durText}</td>
       <td style="white-space:nowrap;">
-        <button class="btn btn-sm" onclick="toggleDetail('${j.id}')">Detail</button>
-        ${canRerun ? `<button class="btn btn-sm" onclick="rerunJob('${j.id}')" style="color:var(--accent);border-color:var(--accent);">Re-run</button>` : ''}
-        ${j.status === 'pending' ? `<button class="btn btn-sm danger" onclick="cancelJob('${j.id}')">Cancel</button>` : ''}
+        <button class="btn btn-sm" onclick="toggleDetail('${j.id}')">詳細</button>
+        ${canRerun ? `<button class="btn btn-sm" onclick="rerunJob('${j.id}')" style="color:var(--accent);border-color:var(--accent);">再実行</button>` : ''}
+        ${j.status === 'pending' ? `<button class="btn btn-sm danger" onclick="cancelJob('${j.id}')">取消</button>` : ''}
       </td>
     </tr><tr class="detail-row" id="detail-${j.id}" style="display:none"><td colspan="6"></td></tr>`;
   }).join('');
@@ -526,7 +473,7 @@ async function toggleDetail(id) {
   if (row.style.display !== 'none') { row.style.display = 'none'; return; }
   row.style.display = '';
   const cell = row.querySelector('td');
-  cell.innerHTML = '<span style="color:var(--text2)">Loading...</span>';
+  cell.innerHTML = '<span style="color:var(--text2)">読み込み中...</span>';
   try {
     const [jr, dr] = await Promise.all([
       api('/api/jobs/' + id),
@@ -538,7 +485,7 @@ async function toggleDetail(id) {
       const er = await fetch('/api/logs/' + id + '/events');
       if (er.ok) {
         const events = await er.json();
-        eventsHtml = '<div style="margin-top:8px"><strong>Timeline:</strong><div class="timeline">' +
+        eventsHtml = '<div style="margin-top:8px"><strong>タイムライン:</strong><div class="timeline">' +
           events.map(e => {
             const cls = e.event?.includes('fail') ? 'err' : e.event?.includes('success') || e.event === 'job_done' ? 'ok' : e.event?.includes('start') ? 'active' : '';
             return `<span class="step ${cls}">${escHtml(e.event)}</span>`;
@@ -546,14 +493,14 @@ async function toggleDetail(id) {
       }
     } catch(e) {}
     const prLink = j.pr_url ? `<div style="margin-top:8px"><strong>PR:</strong> <a href="${escHtml(j.pr_url)}" target="_blank">${escHtml(j.pr_url)}</a></div>` : '';
-    const durInfo = dr && dr.duration_sec != null ? `<div style="margin-top:8px"><strong>Duration:</strong> ${fmtDuration(dr.duration_sec)} (${dr.start} - ${dr.end})</div>` : '';
+    const durInfo = dr && dr.duration_sec != null ? `<div style="margin-top:8px"><strong>所要時間:</strong> ${fmtDuration(dr.duration_sec)} (${dr.start} - ${dr.end})</div>` : '';
     const canRerun = j.status === 'done' || j.status === 'failed';
     cell.innerHTML = `<div class="job-detail">
       <pre>${escHtml(JSON.stringify({repo:j.repo, base_ref:j.base_ref, work_branch:j.work_branch, task:j.task, commands:j.commands, time_budget_sec:j.time_budget_sec, gpu_required:j.gpu_required, created_at:j.created_at}, null, 2))}</pre>
       ${prLink}${durInfo}${eventsHtml}
       <div style="margin-top:8px;display:flex;gap:8px;">
-        <button class="btn btn-sm" onclick="viewJobLog('${id}')">View Log</button>
-        ${canRerun ? `<button class="btn btn-sm" onclick="rerunJob('${id}')" style="color:var(--accent);border-color:var(--accent);">Re-run</button>` : ''}
+        <button class="btn btn-sm" onclick="viewJobLog('${id}')">ログを表示</button>
+        ${canRerun ? `<button class="btn btn-sm" onclick="rerunJob('${id}')" style="color:var(--accent);border-color:var(--accent);">再実行</button>` : ''}
       </div>
     </div>`;
   } catch(e) { cell.innerHTML = '<span style="color:var(--red)">' + escHtml(e.message) + '</span>'; }
@@ -572,20 +519,20 @@ function viewJobLog(id) {
 }
 
 async function cancelJob(id) {
-  if (!confirm('Cancel pending job ' + id + '?')) return;
+  if (!confirm('待機中のジョブ ' + id + ' を取り消しますか？')) return;
   try {
     await api('/api/jobs/' + id, { method: 'DELETE' });
-    toast('Job cancelled', 'success');
+    toast('ジョブを取り消しました', 'success');
     loadJobs();
   } catch(e) { toast(e.message, 'error'); }
 }
 
 async function rerunJob(id) {
-  if (!confirm('Re-run job ' + id + '?\nA new pending job will be created with the same settings.')) return;
+  if (!confirm('ジョブ ' + id + ' を再実行しますか？\n同じ設定で新しいジョブが作成されます。')) return;
   try {
     const r = await api('/api/jobs/' + id + '/rerun', { method: 'POST' });
     const j = await r.json();
-    toast('Re-run submitted: ' + j.id, 'success');
+    toast('再実行ジョブを投入しました: ' + j.id, 'success');
     loadJobs();
   } catch(e) { toast(e.message, 'error'); }
 }
@@ -600,13 +547,12 @@ document.querySelectorAll('.filter-btn').forEach(b => {
   });
 });
 
-// ===== Submit Job =====
 document.getElementById('job-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const msg = document.getElementById('submit-msg');
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
-  msg.textContent = 'Submitting...';
+  msg.textContent = '投入中...';
   msg.style.color = 'var(--text2)';
   try {
     const body = {
@@ -621,9 +567,9 @@ document.getElementById('job-form').addEventListener('submit', async (e) => {
     };
     const r = await api('/api/jobs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
     const j = await r.json();
-    msg.textContent = 'Job created: ' + j.id;
+    msg.textContent = 'ジョブ作成完了: ' + j.id;
     msg.style.color = 'var(--green)';
-    toast('Job submitted!', 'success');
+    toast('ジョブを投入しました', 'success');
     document.getElementById('f-task').value = '';
     document.getElementById('f-setup').value = '';
     document.getElementById('f-test').value = '';
@@ -635,15 +581,14 @@ document.getElementById('job-form').addEventListener('submit', async (e) => {
   btn.disabled = false;
 });
 
-// ===== Logs =====
 async function loadJobSelect() {
   const sel = document.getElementById('log-job-select');
   const prev = sel.value;
   try {
     const r = await api('/api/jobs');
     const jobs = await r.json();
-    sel.innerHTML = '<option value="">-- Select a job --</option>' +
-      jobs.map(j => `<option value="${j.id}">[${j.status}] ${j.id}</option>`).join('');
+    sel.innerHTML = '<option value="">-- ジョブを選択 --</option>' +
+      jobs.map(j => `<option value="${j.id}">[${statusLabel[j.status] || j.status}] ${j.id}</option>`).join('');
     if (prev) sel.value = prev;
   } catch(e) {}
 }
@@ -652,7 +597,7 @@ document.getElementById('log-job-select').addEventListener('change', function() 
   const id = this.value;
   document.getElementById('log-refresh-btn').disabled = !id;
   if (logSSE) { logSSE.close(); logSSE = null; }
-  if (!id) { document.getElementById('log-output').textContent = 'Select a job to view logs.'; return; }
+  if (!id) { document.getElementById('log-output').textContent = 'ジョブを選択してログを表示します。'; return; }
   fetchLog(id);
 });
 
@@ -663,17 +608,14 @@ document.getElementById('log-refresh-btn').addEventListener('click', () => {
 
 async function fetchLog(id) {
   const viewer = document.getElementById('log-output');
-  viewer.textContent = 'Loading...';
+  viewer.textContent = '読み込み中...';
   if (logSSE) { logSSE.close(); logSSE = null; }
   if (document.getElementById('log-stream').checked) {
     viewer.textContent = '';
     logSSE = new EventSource('/api/events/log-stream/' + id);
-    logSSE.onmessage = (e) => {
-      const line = JSON.parse(e.data);
-      appendLogLine(viewer, line);
-    };
+    logSSE.onmessage = (e) => { appendLogLine(viewer, JSON.parse(e.data)); };
     logSSE.addEventListener('done', () => {
-      appendLogLine(viewer, '\n--- Stream ended ---');
+      appendLogLine(viewer, '\n--- ストリーム終了 ---');
       logSSE.close(); logSSE = null;
     });
     logSSE.onerror = () => { logSSE.close(); logSSE = null; fetchLogStatic(id); };
@@ -686,11 +628,11 @@ async function fetchLogStatic(id) {
   const viewer = document.getElementById('log-output');
   try {
     const r = await fetch('/api/logs/' + id);
-    if (!r.ok) throw new Error('Log not found');
+    if (!r.ok) throw new Error('ログが見つかりません');
     const text = await r.text();
     viewer.textContent = '';
     text.split('\n').forEach(line => appendLogLine(viewer, line));
-  } catch(e) { viewer.textContent = 'Error: ' + e.message; }
+  } catch(e) { viewer.textContent = 'エラー: ' + e.message; }
 }
 
 function appendLogLine(viewer, line) {
@@ -704,13 +646,12 @@ function appendLogLine(viewer, line) {
   if (document.getElementById('log-auto').checked) viewer.scrollTop = viewer.scrollHeight;
 }
 
-// ===== Notifications =====
 async function loadNotifications() {
   const list = document.getElementById('notif-list');
   try {
     const r = await api('/api/notifications?tail=50');
     const items = await r.json();
-    if (!items.length) { list.innerHTML = '<li style="color:var(--text2);justify-content:center;">No notifications yet.</li>'; return; }
+    if (!items.length) { list.innerHTML = '<li style="color:var(--text2);justify-content:center;">通知はありません。</li>'; return; }
     const iconMap = {
       job_start: '&#9654;&#65039;', job_done: '&#9989;', job_failed: '&#10060;',
       circuit_breaker: '&#9888;&#65039;', stale_heartbeat: '&#128128;',
@@ -733,13 +674,12 @@ async function loadNotifications() {
   } catch(e) { list.innerHTML = '<li style="color:var(--red)">' + escHtml(e.message) + '</li>'; }
 }
 
-// ===== Settings / Log Stats =====
 async function loadLogStats() {
   try {
     const r = await api('/api/admin/log-stats');
     const data = await r.json();
     const tbody = document.getElementById('log-stats-tbody');
-    if (!data.files.length) { tbody.innerHTML = '<tr><td colspan="3" style="color:var(--text2)">No log files.</td></tr>'; return; }
+    if (!data.files.length) { tbody.innerHTML = '<tr><td colspan="3" style="color:var(--text2)">ログファイルがありません。</td></tr>'; return; }
     tbody.innerHTML = data.files.map(f => {
       const mod = new Date(f.modified).toLocaleString();
       return `<tr><td style="font-family:monospace">${escHtml(f.name)}</td><td class="file-size">${fmtSize(f.size)}</td><td style="font-size:12px;color:var(--text2)">${mod}</td></tr>`;
@@ -748,7 +688,6 @@ async function loadLogStats() {
   } catch(e) { console.error(e); }
 }
 
-// ===== SSE Status Stream =====
 function startStatusStream() {
   if (statusSSE) statusSSE.close();
   statusSSE = new EventSource('/api/events/status-stream');
@@ -761,7 +700,6 @@ function startStatusStream() {
   };
 }
 
-// ===== Init =====
 loadDashboard();
 startStatusStream();
 </script>

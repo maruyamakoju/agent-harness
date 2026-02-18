@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -22,12 +22,12 @@ button:hover { opacity: .9; }
 <body>
 <div class="login-box">
   <h1>Agent Dashboard</h1>
-  <p>Enter your dashboard token to continue.</p>
-  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <p>ダッシュボードのトークンを入力してください。</p>
+  {% if error %}<div class="error">トークンが正しくありません</div>{% endif %}
   <form method="POST" action="/login">
-    <label for="token">Token</label>
+    <label for="token">トークン</label>
     <input type="password" id="token" name="token" placeholder="DASHBOARD_TOKEN" autofocus required>
-    <button type="submit">Sign In</button>
+    <button type="submit">ログイン</button>
   </form>
 </div>
 </body>
