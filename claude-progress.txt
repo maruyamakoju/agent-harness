@@ -1,0 +1,36 @@
+# Progress Log
+## Task: READMEの冒頭に日本語のプロジェクト概要セクションを追加してください。プロジェクト名、目的、主な機能、セットアップ方法を含めてください。
+## Status: COMPLETED
+## Approach: Add a comprehensive Japanese overview section at the beginning of README.md
+
+The Japanese section will include:
+1. Project title and subtitle in Japanese
+2. Project purpose: 24/7 autonomous coding agent system using Claude Code
+3. Key features:
+   - RTX 4090 GPU-powered local machine
+   - 5-layer security model (Docker + sandbox + hooks + egress firewall + PR gate)
+   - Job-based workflow system
+   - Multiple submission channels (SSH, Telegram, GitHub Issues, Cron)
+   - Ollama integration for cost reduction
+4. Quick setup summary matching the existing English Quick Start section
+
+The Japanese content will be placed at the very top of the README, before the English "# 24/7 Autonomous Coding Agent System" title, creating a bilingual document that serves both Japanese and English readers.
+
+## Subtasks
+- [x] 1. Add Japanese overview section to README.md with project name, purpose, key features, and setup instructions (commit: ed3ff81)
+
+## Notes
+- Repository analysis complete
+- Current README.md is 243 lines, entirely in English
+- Documentation includes a dual-boot guide (docs/DUAL-BOOT-GUIDE.md) that is already in Japanese, showing Japanese language is used in this project
+- Test command available: `grep -q プロジェクト README.md`
+- The Japanese section should be professional, technical, and concise while accurately representing the system's capabilities
+
+## Completion Summary
+- Successfully added comprehensive Japanese overview section at the beginning of README.md
+- Section includes: project name, description, purpose (4 points), key features (6 detailed items), and quick setup instructions
+- Japanese content maintains consistency with English content while being natural and professional
+- All tests passed: `grep -q プロジェクト README.md` ✓
+- Committed as ed3ff81: "docs(readme): add Japanese project overview section"
+- Total lines added: 54 lines of Japanese documentation
+- No issues encountered during implementation

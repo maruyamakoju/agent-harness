@@ -1,3 +1,57 @@
+# 24/7 自律型コーディングエージェントシステム
+
+## プロジェクト概要
+
+**24/7 Autonomous Coding Agent System** は、Claude Code をヘッドレスモードで24時間365日稼働させる自律型コーディングエージェントシステムです。RTX 4090搭載のローカルマシン上で、Docker サンドボックス環境内で安全にコードを生成・テスト・コミットします。
+
+### 目的
+
+- **完全自律型の開発フロー**: 人間の介入なしにGitHubリポジトリのタスクを自動実行
+- **高セキュリティ**: 5層のセキュリティモデル（Docker隔離 + サンドボックス + フック + Egress制限 + PRゲート）
+- **GPU活用**: RTX 4090を活用したOllama統合でAPIコスト削減
+- **スケーラブルなジョブ管理**: キューベースのジョブシステムで複数タスクを順次処理
+
+### 主な機能
+
+- **24/7 エージェントループ**: systemd による自動起動・監視、サーキットブレーカー機能
+- **5層セキュリティモデル**:
+  - Layer 1: Docker コンテナ（非root、capability制限）
+  - Layer 2: Claude /sandbox（bubblewrap による隔離）
+  - Layer 3: フック（100+の危険なコマンドパターンをブロック）
+  - Layer 4: Egress ファイアウォール（GitHub、npm、PyPI、Anthropic のみ許可）
+  - Layer 5: Git PR ゲート（main への直接pushを禁止）
+- **ジョブライフサイクル管理**: CLONE → SETUP → INIT → CODE ⇄ TEST → PUSH → DONE
+- **複数の投入チャネル**: SSH、Telegram Bot、GitHub Issues、Cron
+- **GPU統合**: Ollama（ローカルLLM）によるコストダウン、GPU加速テスト対応
+- **モニタリング**: リアルタイムダッシュボード、構造化ログ（JSONL）、通知（Telegram/Discord/Slack）
+
+### セットアップ方法
+
+```bash
+# 1. Ubuntu 24.04 マシンにクローン
+git clone <this-repo> ~/agent-harness && cd ~/agent-harness
+
+# 2. 環境変数を設定
+cp .env.example .env && nano .env
+
+# 3. フルデプロイ（初回のみ - すべて自動実行）
+sudo bash scripts/deploy.sh --full
+
+# 4. 最初のジョブを投入
+bash scripts/create-job.sh \
+  --repo git@github.com:your-org/your-repo.git \
+  --task "Add user authentication with JWT" \
+  --setup "npm ci" \
+  --test "npm test"
+
+# 5. 動作確認
+bash scripts/monitor.sh watch
+```
+
+詳細なセットアップ手順は下記の英語セクションおよび `docs/DUAL-BOOT-GUIDE.md`（日本語）を参照してください。
+
+---
+
 # 24/7 Autonomous Coding Agent System
 
 Claude Code (Headless) + Custom Harness + Hooks + Docker Sandboxing
