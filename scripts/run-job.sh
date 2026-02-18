@@ -305,7 +305,8 @@ $(echo "$TEST_CMDS" | sed 's/^/- /' || echo "- (none specified)")
    - Note what was done and the commit hash
    - Note any issues encountered
 7. Do NOT push to remote. Do NOT modify .git/config.
-8. Stay focused on ONE subtask at a time.
+8. Do NOT commit \`claude-progress.txt\` or \`requirements.json\` - they are internal tracking files.
+9. Stay focused on ONE subtask at a time.
 
 Begin working on the next incomplete subtask now.
 PROMPT
@@ -696,6 +697,9 @@ state_push() {
         fi
     fi
 
+    # Remove agent artifact files (they're included in PR body, not needed in repo)
+    rm -f "$WORKSPACE/claude-progress.txt" "$WORKSPACE/requirements.json" 2>/dev/null
+
     # Ensure everything is committed
     if [[ -n $(git status --porcelain 2>/dev/null) ]]; then
         git add -A 2>&1 | tee -a "$JOB_LOG"
@@ -703,8 +707,6 @@ state_push() {
 chore: auto-commit uncommitted changes before push
 
 Job-ID: ${JOB_ID}
-Agent: autonomous-coding-agent
-Iterations: ${ITERATION}
 EOF
         )" 2>&1 | tee -a "$JOB_LOG" || true
     fi
@@ -719,7 +721,10 @@ EOF
         log_json "push_success" "commits=$commit_count"
 
         # Create PR
-        local pr_title="[Agent] ${TASK:0:60}"
+        # Truncate task for title (byte-safe for multibyte chars)
+        local task_short
+        task_short=$(echo "$TASK" | cut -c1-50)
+        local pr_title="[Agent] ${task_short}"
         local elapsed=$(( $(date +%s) - JOB_START_TIME ))
         local pr_body
         pr_body=$(cat <<EOF
