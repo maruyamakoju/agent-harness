@@ -300,6 +300,14 @@ main() {
         sleep 60
     done
 
+    # Configure git HTTPS auth with GITHUB_TOKEN
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+        git config --global --add url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "git@github.com:"
+        echo "$GITHUB_TOKEN" | gh auth login --with-token 2>/dev/null || true
+        log_event "INFO" "GIT_AUTH" "GitHub HTTPS auth configured"
+    fi
+
     # Log system info at startup
     log_system_info
 

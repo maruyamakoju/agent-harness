@@ -405,7 +405,8 @@ invoke_claude() {
 
     cd "$WORKSPACE"
 
-    timeout "${invoke_timeout}s" claude "${claude_args[@]}" "$prompt" \
+    # Pass prompt via stdin to avoid shell escaping issues with large/multiline prompts
+    echo "$prompt" | timeout "${invoke_timeout}s" claude "${claude_args[@]}" \
         > "$output_file" 2>&1
     local exit_code=$?
 
