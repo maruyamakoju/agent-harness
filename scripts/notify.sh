@@ -42,6 +42,10 @@ case "$EVENT" in
         ICON="📊"
         TEXT="Daily job quota reached. Pausing until midnight."
         ;;
+    auto_queue)
+        ICON="🔄"
+        TEXT="Auto-queue: New job created (count=${JOB_ID})"
+        ;;
     *)
         ICON="ℹ️"
         TEXT="Event: ${EVENT} | Job: ${JOB_ID}"

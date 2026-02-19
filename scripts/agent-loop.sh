@@ -181,24 +181,29 @@ pick_and_claim_job() {
     local gpu_ok="${1:-true}"
     (
         flock -x -w 5 200 || { echo ""; return; }
+        # Sort pending jobs: priority ASC (1=highest), then filename ASC (FIFO within priority)
+        local sorted_jobs
+        sorted_jobs=$(
+            for f in "$JOBS_DIR/pending/"*.json; do
+                [[ -f "$f" ]] || continue
+                prio=$(jq -r '.priority // 3' "$f" 2>/dev/null || echo "3")
+                printf '%02d\t%s\n' "$prio" "$f"
+            done | sort -k1,1n -k2,2 | cut -f2
+        )
         local job_file
         while IFS= read -r job_file; do
             [[ -z "$job_file" ]] && continue
             # Skip GPU-required jobs when GPU is unavailable
             if [[ "$gpu_ok" == "false" ]]; then
-                local gpu_req
                 gpu_req=$(jq -r '.gpu_required // false' "$job_file" 2>/dev/null || echo "false")
-                if [[ "$gpu_req" == "true" ]]; then
-                    continue
-                fi
+                [[ "$gpu_req" == "true" ]] && continue
             fi
-            local bn
             bn=$(basename "$job_file")
             if mv "$job_file" "$JOBS_DIR/running/$bn" 2>/dev/null; then
                 echo "$JOBS_DIR/running/$bn"
                 return
             fi
-        done < <(find "$JOBS_DIR/pending" -name "*.json" -type f 2>/dev/null | sort)
+        done <<< "$sorted_jobs"
     ) 200>"$JOBS_DIR/.pick.lock"
 }
 

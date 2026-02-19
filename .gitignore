@@ -1,6 +1,9 @@
 # Environment secrets
 .env
 
+# Auto-queue config (may contain sensitive task details)
+config/
+
 # Job data (runtime state)
 jobs/pending/*.json
 jobs/running/*.json
@@ -17,6 +20,14 @@ workspaces/
 
 # Docker
 .docker/
+
+# Python
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Runtime logs (text)
+logs/*.txt
 
 # OS
 .DS_Store

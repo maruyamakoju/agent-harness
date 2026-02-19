@@ -11,5 +11,6 @@
   "time_budget_sec": 3600,
   "max_retries": 2,
   "gpu_required": false,
+  "priority": 3,
   "created_at": "2026-02-16T09:00:00Z"
 }

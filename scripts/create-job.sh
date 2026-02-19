@@ -14,6 +14,9 @@ BASE_REF="main"
 TIME_BUDGET=3600
 MAX_RETRIES=2
 GPU_REQUIRED=false
+PRIORITY=3
+ISSUE_NUMBER=""
+ISSUE_REPO=""
 SETUP_CMDS='[]'
 TEST_CMDS='[]'
 
@@ -34,6 +37,9 @@ Optional:
   --time-budget <sec>   Time budget in seconds (default: 3600)
   --max-retries <n>     Max retries on failure (default: 2)
   --gpu                 Mark job as GPU-required
+  --priority <1-5>      Job priority: 1=緊急, 2=高, 3=普通(default), 4=低, 5=最低
+  --issue-number <n>    GitHub Issue number to close on PR merge
+  --issue-repo <owner/repo>  GitHub repo containing the issue
   --setup <cmd>         Setup command (can be repeated)
   --test <cmd>          Test command (can be repeated)
 
@@ -67,9 +73,12 @@ while [[ $# -gt 0 ]]; do
         --branch)   BRANCH_OVERRIDE="$2"; shift 2 ;;
         --time-budget) TIME_BUDGET="$2"; shift 2 ;;
         --max-retries) MAX_RETRIES="$2"; shift 2 ;;
-        --gpu)      GPU_REQUIRED=true; shift ;;
-        --setup)    SETUP_ARRAY+=("$2"); shift 2 ;;
-        --test)     TEST_ARRAY+=("$2"); shift 2 ;;
+        --gpu)          GPU_REQUIRED=true; shift ;;
+        --priority)     PRIORITY="$2"; shift 2 ;;
+        --issue-number) ISSUE_NUMBER="$2"; shift 2 ;;
+        --issue-repo)   ISSUE_REPO="$2"; shift 2 ;;
+        --setup)        SETUP_ARRAY+=("$2"); shift 2 ;;
+        --test)         TEST_ARRAY+=("$2"); shift 2 ;;
         -h|--help)  usage ;;
         *)          echo "Unknown option: $1"; usage ;;
     esac
@@ -110,6 +119,15 @@ TEST_CMDS=$(printf '%s\n' "${TEST_ARRAY[@]}" 2>/dev/null | jq -R . | jq -s . 2>/
 # ---------------------------------------------------------------------------
 JOB_FILE="${JOBS_DIR}/${JOB_ID}.json"
 
+# Build optional issue fields
+ISSUE_FIELDS=""
+if [[ -n "$ISSUE_NUMBER" ]]; then
+    ISSUE_FIELDS=$(jq -n \
+        --argjson num "$ISSUE_NUMBER" \
+        --arg repo "$ISSUE_REPO" \
+        '{issue_number: $num, issue_repo: $repo}')
+fi
+
 jq -n \
     --arg id "$JOB_ID" \
     --arg repo "$REPO" \
@@ -121,6 +139,8 @@ jq -n \
     --argjson budget "$TIME_BUDGET" \
     --argjson retries "$MAX_RETRIES" \
     --argjson gpu "$GPU_REQUIRED" \
+    --argjson priority "$PRIORITY" \
+    --argjson issue "${ISSUE_FIELDS:-null}" \
     '{
         id: $id,
         repo: $repo,
@@ -134,8 +154,9 @@ jq -n \
         time_budget_sec: $budget,
         max_retries: $retries,
         gpu_required: $gpu,
+        priority: $priority,
         created_at: (now | todate)
-    }' > "$JOB_FILE"
+    } + (if $issue != null then $issue else {} end)' > "$JOB_FILE"
 
 echo "Job created: $JOB_FILE"
 echo "Job ID: $JOB_ID"

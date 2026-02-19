@@ -245,7 +245,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
     <input type="text" id="job-search" placeholder="リポジトリ・タスクで検索..." style="width:auto;min-width:220px;padding:4px 12px;font-size:13px;border-radius:20px;">
   </div>
   <table>
-    <thead><tr><th>ジョブID</th><th>リポジトリ</th><th>タスク</th><th>状態</th><th>所要時間</th><th>操作</th></tr></thead>
+    <thead><tr><th>ジョブID</th><th>リポジトリ</th><th>タスク</th><th>優先</th><th>状態</th><th>所要時間</th><th>操作</th></tr></thead>
     <tbody id="jobs-tbody"><tr><td colspan="6" class="loading-text">読み込み中...</td></tr></tbody>
   </table>
   <div style="text-align:center;margin-top:16px;" id="jobs-load-more-wrap" style="display:none;">
@@ -289,10 +289,20 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
         <label for="f-retries">最大リトライ回数</label>
         <input type="number" id="f-retries" value="2" min="0" max="5">
       </div>
-      <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;padding-bottom:4px;">
-        <input type="checkbox" id="f-gpu" style="width:auto;">
-        <label for="f-gpu" style="margin:0;cursor:pointer;">GPU必須</label>
+      <div class="form-group">
+        <label for="f-priority">優先度</label>
+        <select id="f-priority">
+          <option value="1">1 — 緊急</option>
+          <option value="2">2 — 高</option>
+          <option value="3" selected>3 — 普通</option>
+          <option value="4">4 — 低</option>
+          <option value="5">5 — 最低</option>
+        </select>
       </div>
+    </div>
+    <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="f-gpu" style="width:auto;">
+      <label for="f-gpu" style="margin:0;cursor:pointer;">GPU必須</label>
     </div>
     <button type="submit" class="btn primary">ジョブを投入</button>
     <span id="submit-msg" style="margin-left:12px;font-size:13px;"></span>
@@ -609,8 +619,11 @@ const SSE = {
 
     State.statusSSE.onmessage = (e) => {
       try {
-        StatusUI.update(JSON.parse(e.data));
-        // Reset retry delay on successful message
+        const data = JSON.parse(e.data);
+        StatusUI.update(data);
+        // Live donut chart update on every status push
+        const c = data.counts || {};
+        Charts.drawDonut(c.done || 0, c.failed || 0, c.running || 0, c.pending || 0);
         State.sseRetryDelay = 1000;
       } catch (ex) { /* ignore parse errors */ }
     };
@@ -852,9 +865,11 @@ const JobsTab = {
       countInfo.textContent = State.allJobs.length + ' / ' + this._total + ' 件表示中';
     }
     if (!jobs.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-text">ジョブが見つかりません。</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-text">ジョブが見つかりません。</td></tr>';
       return;
     }
+    const PRIO_LABEL = {1:'緊急',2:'高',3:'',4:'低',5:'最低'};
+    const PRIO_COLOR = {1:'var(--red)',2:'var(--yellow)',3:'',4:'var(--text2)',5:'var(--text2)'};
     // Duration is already enriched server-side - no extra API calls
     tbody.innerHTML = jobs.map(j => {
       const repo = Utils.repoShort(j.repo);
@@ -862,10 +877,17 @@ const JobsTab = {
       const durText = Utils.fmtDuration(j.duration_sec);
       const canRerun = j.status === 'done' || j.status === 'failed';
       const sl = STATUS_LABELS[j.status] || j.status;
+      const prio = j.priority || 3;
+      const prioLabel = PRIO_LABEL[prio] || '';
+      const prioColor = PRIO_COLOR[prio] || '';
+      const prioCell = prioLabel
+        ? `<span style="font-size:11px;font-weight:600;color:${prioColor};">${prio} ${prioLabel}</span>`
+        : `<span style="font-size:11px;color:var(--text2);">${prio}</span>`;
       return `<tr data-id="${Utils.escHtml(j.id)}">
         <td style="font-family:monospace;font-size:12px;white-space:nowrap;">${Utils.escHtml(j.id)}</td>
         <td>${Utils.escHtml(repo)}</td>
         <td>${Utils.escHtml(task)}</td>
+        <td style="text-align:center;">${prioCell}</td>
         <td><span class="badge ${j.status}">${sl}</span></td>
         <td style="font-size:12px;white-space:nowrap;">${durText}</td>
         <td style="white-space:nowrap;">
@@ -873,7 +895,7 @@ const JobsTab = {
           ${canRerun ? `<button class="btn btn-sm" onclick="JobsTab.rerun('${j.id}')" style="color:var(--accent);border-color:var(--accent);">再実行</button>` : ''}
           ${j.status === 'pending' ? `<button class="btn btn-sm danger" onclick="JobsTab.cancel('${j.id}')">取消</button>` : ''}
         </td>
-      </tr><tr class="detail-row" id="detail-${j.id}" style="display:none"><td colspan="6"></td></tr>`;
+      </tr><tr class="detail-row" id="detail-${j.id}" style="display:none"><td colspan="7"></td></tr>`;
     }).join('');
   },
 
@@ -959,6 +981,7 @@ const SubmitTab = {
           setup: Utils.$('f-setup').value,
           test: Utils.$('f-test').value,
           max_retries: parseInt(Utils.$('f-retries').value) || 2,
+          priority: parseInt(Utils.$('f-priority').value) || 3,
           gpu_required: Utils.$('f-gpu').checked,
         });
         const j = await r.json();

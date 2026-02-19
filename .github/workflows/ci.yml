@@ -121,6 +121,21 @@ jobs:
 
           echo "All fields present."
 
+  dashboard-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dashboard dependencies
+        run: pip install flask>=3.0 pytest
+
+      - name: Run dashboard test suite
+        run: cd dashboard && python -m pytest test_dashboard.py -v --tb=short
+
   docker-build:
     runs-on: ubuntu-latest
     steps:

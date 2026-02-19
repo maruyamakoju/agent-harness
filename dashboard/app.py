@@ -88,6 +88,16 @@ def add_security_headers(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "0"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # CSP: inline scripts/styles are required by the SPA; restrict all other sources to 'self'
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "font-src 'self'; "
+        "frame-ancestors 'none';"
+    )
     if request.is_secure:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
@@ -375,6 +385,7 @@ def api_create_job():
         test_cmds = [c.strip() for c in test_cmds.split("\n") if c.strip()]
 
     job_id = _generate_job_id(task)
+    priority = max(1, min(5, int(body.get("priority", 3))))
     job = {
         "id": job_id,
         "repo": repo,
@@ -385,8 +396,12 @@ def api_create_job():
         "time_budget_sec": int(body.get("time_budget", 3600)),
         "max_retries": int(body.get("max_retries", 2)),
         "gpu_required": bool(body.get("gpu_required", False)),
+        "priority": priority,
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
+    if body.get("issue_number") and body.get("issue_repo"):
+        job["issue_number"] = int(body["issue_number"])
+        job["issue_repo"] = str(body["issue_repo"])
 
     _write_pending_job(job)
     return jsonify(job), 201
@@ -429,6 +444,7 @@ def api_rerun_job(job_id: str):
         "time_budget_sec": data.get("time_budget_sec", 3600),
         "max_retries": data.get("max_retries", 2),
         "gpu_required": data.get("gpu_required", False),
+        "priority": data.get("priority", 3),
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
 

@@ -35,7 +35,8 @@ services:
       # Quota management
       - MAX_JOBS_PER_DAY=${MAX_JOBS_PER_DAY:-20}
       - JOB_COOLDOWN=${JOB_COOLDOWN:-60}
-      - DEFAULT_MODEL=${DEFAULT_MODEL:-claude-sonnet-4-5-20250929}
+      - MAX_PARALLEL_JOBS=${MAX_PARALLEL_JOBS:-2}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-claude-sonnet-4-6}
       # GitHub Issue → auto-job (space-separated repo list)
       - AGENT_WATCH_REPOS=${AGENT_WATCH_REPOS:-}
 
@@ -52,6 +53,8 @@ services:
       # On Ubuntu host, default: /home/agent/.ssh/id_ed25519
       - ${SSH_KEY_PATH:-/home/agent/.ssh/id_ed25519}:/home/agent/.ssh/id_ed25519:ro
       - ${SSH_KEY_PATH:-/home/agent/.ssh/id_ed25519}.pub:/home/agent/.ssh/id_ed25519.pub:ro
+      # Config (auto-queue templates, etc.)
+      - ./config:/harness/config
       # Workspaces (ephemeral)
       - agent-workspaces:/workspaces
 
@@ -97,10 +100,13 @@ services:
       - HARNESS_DIR=/harness
       - TZ=Asia/Tokyo
       - DASHBOARD_TOKEN=${DASHBOARD_TOKEN:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GH_TOKEN=${GITHUB_TOKEN:-}
     volumes:
       - ./jobs:/harness/jobs:ro
       - ./logs:/harness/logs:ro
       - ./jobs/pending:/harness/jobs/pending  # write for job submission
+      - ./config:/harness/config
     networks:
       - agent-net
     depends_on:

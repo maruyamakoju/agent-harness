@@ -182,9 +182,9 @@ fi
 # ---------------------------------------------------------------------------
 # 7. Test state transitions (simulated)
 # ---------------------------------------------------------------------------
-step "Testing state machine logic"
+step "Testing state machine logic (basic fields)"
 
-# Verify job file has all required fields
+# Verify original job file has all originally-required fields
 if [[ -f "$JOB_FILE" ]]; then
     for field in id repo base_ref work_branch task time_budget_sec; do
         val=$(jq -r ".$field" "$JOB_FILE")
@@ -197,7 +197,104 @@ if [[ -f "$JOB_FILE" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 8. Docker container test (if --docker mode)
+# 8. Test create-job.sh --priority flag
+# ---------------------------------------------------------------------------
+step "Testing --priority flag in create-job.sh"
+
+"$HARNESS_DIR/scripts/create-job.sh" \
+    --repo "$TEST_REPO" \
+    --task "Urgent security patch" \
+    --priority 1 \
+    --test "node test.js" \
+    > /dev/null 2>&1
+
+URGENT_FILE=$(find "$HARNESS_DIR/jobs/pending" -name "*.json" | xargs grep -l '"priority": 1' 2>/dev/null | head -1)
+if [[ -n "$URGENT_FILE" ]]; then
+    pass "--priority 1 written to job JSON"
+else
+    fail "--priority 1 not found in job JSON"
+fi
+
+# Default priority (no flag)
+"$HARNESS_DIR/scripts/create-job.sh" \
+    --repo "$TEST_REPO" \
+    --task "Routine refactor" \
+    --test "node test.js" \
+    > /dev/null 2>&1
+
+NORMAL_FILE=$(find "$HARNESS_DIR/jobs/pending" -name "*.json" | xargs grep -l '"priority": 3' 2>/dev/null | head -1)
+if [[ -n "$NORMAL_FILE" ]]; then
+    pass "default priority=3 written when --priority omitted"
+else
+    fail "default priority missing from job JSON"
+fi
+
+# ---------------------------------------------------------------------------
+# 9. Test priority sort order (simulate pick_and_claim_job ordering)
+# ---------------------------------------------------------------------------
+step "Testing priority sort order"
+
+# We have jobs with priority 1 and 3 in pending.
+# Verify that 'sort' on the tab-prefixed list puts priority=1 first.
+SORTED=$(
+    for f in "$HARNESS_DIR/jobs/pending/"*.json; do
+        [[ -f "$f" ]] || continue
+        prio=$(jq -r '.priority // 3' "$f" 2>/dev/null || echo "3")
+        printf '%02d\t%s\n' "$prio" "$f"
+    done | sort -k1,1n -k2,2 | head -1 | cut -f2
+)
+SORTED_PRIO=$(jq -r '.priority // 3' "$SORTED" 2>/dev/null)
+if [[ "$SORTED_PRIO" == "1" ]]; then
+    pass "Priority=1 job is picked first"
+else
+    fail "Expected first pick to have priority=1, got priority=$SORTED_PRIO"
+fi
+
+# ---------------------------------------------------------------------------
+# 10. Test --issue-number / --issue-repo flags
+# ---------------------------------------------------------------------------
+step "Testing --issue-number and --issue-repo flags"
+
+"$HARNESS_DIR/scripts/create-job.sh" \
+    --repo "$TEST_REPO" \
+    --task "Fix issue from GitHub" \
+    --issue-number 42 \
+    --issue-repo "org/myrepo" \
+    --test "node test.js" \
+    > /dev/null 2>&1
+
+ISSUE_FILE=$(find "$HARNESS_DIR/jobs/pending" -name "*.json" | \
+    xargs grep -l '"issue_number": 42' 2>/dev/null | head -1)
+if [[ -n "$ISSUE_FILE" ]]; then
+    pass "issue_number=42 written to job JSON"
+    IREPO=$(jq -r '.issue_repo // empty' "$ISSUE_FILE")
+    if [[ "$IREPO" == "org/myrepo" ]]; then
+        pass "issue_repo=org/myrepo written correctly"
+    else
+        fail "issue_repo mismatch: got '$IREPO'"
+    fi
+else
+    fail "issue_number not found in job JSON"
+fi
+
+# ---------------------------------------------------------------------------
+# 11. Test all required job fields (including new priority field)
+# ---------------------------------------------------------------------------
+step "Testing all required job fields (including new fields)"
+
+if [[ -f "$JOB_FILE" ]]; then
+    for field in id repo base_ref work_branch task time_budget_sec priority; do
+        val=$(jq -r ".$field" "$JOB_FILE")
+        if [[ -n "$val" && "$val" != "null" ]]; then
+            pass "Job has field: $field = $(echo "$val" | head -c 40)"
+        else
+            fail "Job missing required field: $field"
+        fi
+    done
+fi
+
+# ---------------------------------------------------------------------------
+# 13. Docker container test (if --docker mode)
 # ---------------------------------------------------------------------------
 if [[ "$MODE" == "--docker" ]]; then
     step "Testing Docker container"

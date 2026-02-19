@@ -580,6 +580,27 @@ class TestSecurityHeaders:
         r = client.get("/api/status")
         assert r.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
 
+    def test_content_security_policy_present(self, client):
+        r = client.get("/api/status")
+        csp = r.headers.get("Content-Security-Policy", "")
+        assert "default-src" in csp
+
+    def test_csp_restricts_default_src_to_self(self, client):
+        r = client.get("/api/status")
+        csp = r.headers.get("Content-Security-Policy", "")
+        assert "default-src 'self'" in csp
+
+    def test_csp_allows_connect_src_self(self, client):
+        # SSE/fetch must work same-origin
+        r = client.get("/api/status")
+        csp = r.headers.get("Content-Security-Policy", "")
+        assert "connect-src 'self'" in csp
+
+    def test_csp_denies_frame_ancestors(self, client):
+        r = client.get("/api/status")
+        csp = r.headers.get("Content-Security-Policy", "")
+        assert "frame-ancestors 'none'" in csp
+
 
 # ---------------------------------------------------------------------------
 # Edge Cases & Security
@@ -807,6 +828,66 @@ class TestKanbanStreamAPI:
         # Use buffered=False and read only headers to avoid hanging on stream
         with client.get("/api/events/kanban-stream", buffered=False) as r:
             assert r.content_type.startswith("text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# Priority
+# ---------------------------------------------------------------------------
+class TestPriority:
+    def test_create_job_default_priority(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "Test default priority",
+        })
+        assert r.status_code == 201
+        job = r.get_json()
+        assert job["priority"] == 3
+        client.delete(f"/api/jobs/{job['id']}")
+
+    def test_create_job_with_priority_1(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "Urgent fix",
+            "priority": 1,
+        })
+        assert r.status_code == 201
+        job = r.get_json()
+        assert job["priority"] == 1
+        client.delete(f"/api/jobs/{job['id']}")
+
+    def test_create_job_priority_clamped(self, client):
+        # Priority must be between 1 and 5
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "Priority clamping test",
+            "priority": 99,
+        })
+        assert r.status_code == 201
+        job = r.get_json()
+        assert job["priority"] == 5  # clamped to max 5
+        client.delete(f"/api/jobs/{job['id']}")
+
+    def test_rerun_preserves_priority(self, client):
+        # The done job in fixtures has no priority → should default to 3 on rerun
+        r = client.post("/api/jobs/2026-01-01T120000Z-test-done/rerun")
+        assert r.status_code == 201
+        job = r.get_json()
+        assert "priority" in job
+        assert 1 <= job["priority"] <= 5
+        client.delete(f"/api/jobs/{job['id']}")
+
+    def test_create_job_with_issue_number(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "Close issue 42",
+            "issue_number": 42,
+            "issue_repo": "org/myrepo",
+        })
+        assert r.status_code == 201
+        job = r.get_json()
+        assert job["issue_number"] == 42
+        assert job["issue_repo"] == "org/myrepo"
+        client.delete(f"/api/jobs/{job['id']}")
 
 
 # ---------------------------------------------------------------------------
