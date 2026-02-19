@@ -82,6 +82,22 @@ log_state_transition() {
 }
 
 # ---------------------------------------------------------------------------
+# Cancellation check: read cancelled flag from job file
+# ---------------------------------------------------------------------------
+check_cancelled() {
+    if [[ -f "$JOB_FILE" ]]; then
+        local is_cancelled
+        is_cancelled=$(jq -r '.cancelled // false' "$JOB_FILE" 2>/dev/null || echo "false")
+        if [[ "$is_cancelled" == "true" ]]; then
+            log "WARN" "Cancellation flag detected – stopping job"
+            log_json "job_cancelled" "cancelled=true"
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Time budget check
 # ---------------------------------------------------------------------------
 check_time_budget() {
@@ -887,9 +903,20 @@ main() {
     log "INFO" "=========================================="
     log_json "job_start" "repo=$REPO task=$TASK budget=${TIME_BUDGET}s"
 
+    # Write agent PID into the job file so cancel-job.sh / dashboard can signal us
+    if [[ -f "$JOB_FILE" ]]; then
+        jq --argjson pid $$ '. + {agent_pid: $pid}' "$JOB_FILE" > "$JOB_FILE.tmp" \
+            && mv "$JOB_FILE.tmp" "$JOB_FILE" 2>/dev/null || true
+    fi
+
     trap cleanup EXIT
 
     while true; do
+        # Check for user-initiated cancellation on each state transition
+        if ! check_cancelled; then
+            STATE="FAILED"
+        fi
+
         case "$STATE" in
             CLONE)  state_clone ;;
             SETUP)  state_setup ;;

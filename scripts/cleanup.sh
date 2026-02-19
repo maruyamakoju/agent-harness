@@ -30,18 +30,31 @@ find "$JOBS_DIR/failed" -name "*.json" -mtime +14 -delete 2>/dev/null || true
 # 3. Compress and rotate logs older than 7 days
 # ---------------------------------------------------------------------------
 echo "Rotating logs..."
-find "$LOGS_DIR" -name "*.log" -mtime +7 -exec gzip {} \; 2>/dev/null || true
+
+# Compress per-job .log files older than 7 days
+find "$LOGS_DIR" -name "*.log" -not -name "cleanup.log" -mtime +7 -exec gzip {} \; 2>/dev/null || true
+
+# Delete compressed per-job .log.gz files older than 30 days
 find "$LOGS_DIR" -name "*.log.gz" -mtime +30 -delete 2>/dev/null || true
 
-# Rotate JSONL logs
+# Delete per-job .jsonl files older than 30 days
+find "$LOGS_DIR" -name "*.jsonl" \
+    -not -name "agent-loop.jsonl" \
+    -not -name "issue-job-map.jsonl" \
+    -mtime +30 -delete 2>/dev/null || true
+
+# Rotate the main agent-loop.jsonl if it grows beyond 100 MB
 if [[ -f "$LOGS_DIR/agent-loop.jsonl" ]]; then
     local_size=$(stat -c%s "$LOGS_DIR/agent-loop.jsonl" 2>/dev/null || echo 0)
-    if [[ $local_size -gt 104857600 ]]; then  # > 100MB
+    if [[ $local_size -gt 104857600 ]]; then  # > 100 MB
         mv "$LOGS_DIR/agent-loop.jsonl" "$LOGS_DIR/agent-loop.$(date +%Y%m%d).jsonl"
         gzip "$LOGS_DIR/agent-loop.$(date +%Y%m%d).jsonl"
-        echo "  Rotated agent-loop.jsonl"
+        echo "  Rotated agent-loop.jsonl (was ${local_size} bytes)"
     fi
 fi
+
+# Delete old rotated agent-loop archives (> 60 days)
+find "$LOGS_DIR" -name "agent-loop.*.jsonl.gz" -mtime +60 -delete 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # 4. Remove orphaned workspaces

@@ -1120,6 +1120,65 @@ class TestRateLimit:
 
 
 # ---------------------------------------------------------------------------
+# Cancel API
+# ---------------------------------------------------------------------------
+class TestCancel:
+    def test_cancel_pending_job(self, client):
+        r = client.post("/api/jobs", json={"repo": "https://github.com/test/cancel.git", "task": "Cancel me"})
+        assert r.status_code == 201
+        job_id = r.get_json()["id"]
+
+        r2 = client.post(f"/api/jobs/{job_id}/cancel")
+        assert r2.status_code == 200
+        j = r2.get_json()
+        assert j["cancelled"] == job_id
+        assert j["was"] == "pending"
+
+        # Verify it's gone
+        r3 = client.get(f"/api/jobs/{job_id}")
+        assert r3.status_code == 404
+
+    def test_cancel_running_job(self, client, test_data_dir):
+        job_id = "2026-01-10T000000Z-test-cancel-running"
+        job = {
+            "id": job_id,
+            "repo": "https://github.com/test/r.git",
+            "base_ref": "main",
+            "work_branch": "agent/" + job_id,
+            "task": "cancel running test",
+            "commands": {},
+            "time_budget_sec": 3600,
+            "gpu_required": False,
+            "created_at": "2026-01-10T00:00:00Z",
+        }
+        p = test_data_dir / "jobs" / "running" / f"{job_id}.json"
+        p.write_text(json.dumps(job), encoding="utf-8")
+        try:
+            r = client.post(f"/api/jobs/{job_id}/cancel")
+            assert r.status_code == 200
+            j = r.get_json()
+            assert j["cancelled"] == job_id
+            assert j["was"] == "running"
+            # Verify cancelled flag written to file
+            updated = json.loads(p.read_text(encoding="utf-8"))
+            assert updated.get("cancelled") is True
+        finally:
+            p.unlink(missing_ok=True)
+
+    def test_cancel_nonexistent_returns_404(self, client):
+        r = client.post("/api/jobs/nonexistent-job-id/cancel")
+        assert r.status_code == 404
+
+    def test_cancel_done_job_returns_404(self, client):
+        r = client.post("/api/jobs/2026-01-01T120000Z-test-done/cancel")
+        assert r.status_code == 404
+
+    def test_cancel_path_traversal_blocked(self, client):
+        r = client.post("/api/jobs/../../../etc/passwd/cancel")
+        assert r.status_code in (400, 404)
+
+
+# ---------------------------------------------------------------------------
 # Legacy compatibility - keep the original runner for backward compat
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":

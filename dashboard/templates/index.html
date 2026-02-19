@@ -894,6 +894,7 @@ const JobsTab = {
           <button class="btn btn-sm" onclick="JobsTab.toggleDetail('${j.id}')">詳細</button>
           ${canRerun ? `<button class="btn btn-sm" onclick="JobsTab.rerun('${j.id}')" style="color:var(--accent);border-color:var(--accent);">再実行</button>` : ''}
           ${j.status === 'pending' ? `<button class="btn btn-sm danger" onclick="JobsTab.cancel('${j.id}')">取消</button>` : ''}
+          ${j.status === 'running' ? `<button class="btn btn-sm danger" onclick="JobsTab.cancelRunning('${j.id}')">中断</button>` : ''}
         </td>
       </tr><tr class="detail-row" id="detail-${j.id}" style="display:none"><td colspan="7"></td></tr>`;
     }).join('');
@@ -944,6 +945,15 @@ const JobsTab = {
     try {
       await Api.del('/api/jobs/' + id);
       Toast.show('ジョブを取り消しました', 'success');
+      this.load();
+    } catch (e) { Toast.show(e.message, 'error'); }
+  },
+
+  async cancelRunning(id) {
+    if (!confirm('実行中のジョブ ' + id + ' を中断しますか？\nエージェントプロセスにSIGTERMが送信されます。')) return;
+    try {
+      await Api.postJSON('/api/jobs/' + id + '/cancel', {});
+      Toast.show('ジョブの中断を要求しました', 'success');
       this.load();
     } catch (e) { Toast.show(e.message, 'error'); }
   },

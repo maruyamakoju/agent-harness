@@ -451,6 +451,47 @@ def api_delete_job(job_id: str):
     return jsonify({"deleted": job_id})
 
 
+@app.route("/api/jobs/<job_id>/cancel", methods=["POST"])
+@require_auth
+def api_cancel_job(job_id: str):
+    """Cancel a pending or running job.
+
+    Pending jobs are removed immediately.
+    Running jobs are marked cancelled=true so run-job.sh stops on next
+    state-transition check; SIGTERM is also sent if agent_pid is recorded.
+    """
+    job_id = _sanitize_job_id(job_id)
+
+    # Pending → delete immediately
+    p = PENDING / f"{job_id}.json"
+    if p.exists():
+        p.unlink()
+        return jsonify({"cancelled": job_id, "was": "pending"})
+
+    # Running → set cancelled flag + signal the process
+    r = RUNNING / f"{job_id}.json"
+    if r.exists():
+        data = _read_json(r)
+        if data is None:
+            abort(404, description="Could not read running job file")
+        data["cancelled"] = True
+        r.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        # Best-effort SIGTERM (works when dashboard and agent share the same OS)
+        agent_pid = data.get("agent_pid")
+        if agent_pid:
+            import signal as _signal
+            try:
+                import os as _os
+                _os.kill(int(agent_pid), _signal.SIGTERM)
+            except (ProcessLookupError, PermissionError, ValueError):
+                pass  # process already gone or cross-container
+
+        return jsonify({"cancelled": job_id, "was": "running"})
+
+    abort(404, description="Job not found in pending or running state")
+
+
 # ===== API: Job Re-run ======================================================
 
 @app.route("/api/jobs/<job_id>/rerun", methods=["POST"])
