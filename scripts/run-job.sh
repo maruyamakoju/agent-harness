@@ -41,6 +41,8 @@ JOB_START_TIME=$(date +%s)
 LAST_COMMIT_HASH=""
 CONVERSATION_ID=""          # Claude Code session ID for resume
 TOTAL_COST_USD=0            # Track API cost
+ISSUE_NUMBER=$(jq -r '.issue_number // empty' "$JOB_FILE")
+ISSUE_REPO=$(jq -r '.issue_repo // empty' "$JOB_FILE")
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -375,23 +377,23 @@ invoke_claude() {
         "Bash(sed *)" "Bash(tee *)" "Bash(xargs *)"
     )
 
+    # Build comma-separated tool list for --allowedTools
+    local tools_csv
+    tools_csv=$(IFS=','; echo "${allowed_tools[*]}")
+
     local claude_args=(
         -p
         --output-format json
-        --model "${DEFAULT_MODEL:-claude-sonnet-4-5-20250929}"
+        --model "${DEFAULT_MODEL:-claude-sonnet-4-6}"
+        --allowedTools "$tools_csv"
     )
-
-    # Add each tool with its own --allowedTools flag
-    for tool in "${allowed_tools[@]}"; do
-        claude_args+=(--allowedTools "$tool")
-    done
 
     # Resume conversation if we have a session ID
     if [[ -n "$CONVERSATION_ID" ]]; then
         claude_args+=(--resume "$CONVERSATION_ID")
     fi
 
-    log "INFO" "Invoking Claude Code (model: ${DEFAULT_MODEL:-claude-sonnet-4-5-20250929}, session: ${CONVERSATION_ID:-new})"
+    log "INFO" "Invoking Claude Code (model: ${DEFAULT_MODEL:-claude-sonnet-4-6}, session: ${CONVERSATION_ID:-new})"
 
     # Run Claude with timeout (use remaining time budget, max 30 min per invocation)
     local elapsed=$(( $(date +%s) - JOB_START_TIME ))
@@ -414,18 +416,31 @@ invoke_claude() {
     # Append raw output to job log
     cat "$output_file" >> "$JOB_LOG"
 
-    # Try to extract session ID and cost from JSON output
+    # Try to extract session ID and cost from JSONL output (last line first)
     if [[ -f "$output_file" ]]; then
+        local last_line
+        last_line=$(tail -1 "$output_file" 2>/dev/null || true)
+
         local new_session_id
-        new_session_id=$(jq -r '.session_id // .conversation_id // empty' "$output_file" 2>/dev/null || true)
+        new_session_id=$(echo "$last_line" | jq -r '.session_id // .conversation_id // empty' 2>/dev/null || true)
+        if [[ -z "$new_session_id" ]]; then
+            # Fallback: scan all lines for session_id
+            new_session_id=$(jq -r '.session_id // .conversation_id // empty' "$output_file" 2>/dev/null \
+                | grep -v '^$' | head -1 || true)
+        fi
         if [[ -n "$new_session_id" ]]; then
             CONVERSATION_ID="$new_session_id"
             log "INFO" "Session ID: $CONVERSATION_ID"
         fi
 
-        # Extract cost if available
+        # Extract cost from last line first (most accurate for JSONL)
         local cost
-        cost=$(jq -r '.cost_usd // .usage.cost // empty' "$output_file" 2>/dev/null || true)
+        cost=$(echo "$last_line" | jq -r '.cost_usd // .usage.cost // empty' 2>/dev/null || true)
+        if [[ -z "$cost" ]]; then
+            # Fallback: scan all lines for cost
+            cost=$(jq -r '.cost_usd // .usage.cost // empty' "$output_file" 2>/dev/null \
+                | grep -v '^$' | tail -1 || true)
+        fi
         if [[ -n "$cost" ]]; then
             TOTAL_COST_USD=$(echo "$TOTAL_COST_USD + $cost" | bc 2>/dev/null || echo "$TOTAL_COST_USD")
             log "INFO" "Invocation cost: \$${cost} (total: \$${TOTAL_COST_USD})"
@@ -613,9 +628,19 @@ state_test() {
     log_json "test_start" ""
 
     if [[ -z "$TEST_CMDS" ]]; then
-        log "INFO" "No test commands defined, skipping to PUSH"
-        log_state_transition "TEST" "PUSH"
-        STATE="PUSH"
+        # Even without test commands, continue coding if subtasks remain
+        if [[ $ITERATION -lt $MAX_ITERATIONS ]] && \
+           [[ -f "$WORKSPACE/claude-progress.txt" ]] && \
+           grep -q '^\- \[ \]' "$WORKSPACE/claude-progress.txt" 2>/dev/null && \
+           check_time_budget; then
+            log "INFO" "No test commands, but incomplete subtasks detected, returning to CODE"
+            log_state_transition "TEST" "CODE" "no-tests-more-subtasks"
+            STATE="CODE"
+        else
+            log "INFO" "No test commands defined, proceeding to PUSH"
+            log_state_transition "TEST" "PUSH"
+            STATE="PUSH"
+        fi
         return
     fi
 
@@ -642,8 +667,19 @@ state_test() {
     if [[ "$all_passed" == "true" ]]; then
         log "INFO" "All tests passed"
         log_json "test_all_passed" ""
-        log_state_transition "TEST" "PUSH"
-        STATE="PUSH"
+
+        # If incomplete subtasks remain and budget allows, continue coding
+        if [[ $ITERATION -lt $MAX_ITERATIONS ]] && \
+           [[ -f "$WORKSPACE/claude-progress.txt" ]] && \
+           grep -q '^\- \[ \]' "$WORKSPACE/claude-progress.txt" 2>/dev/null && \
+           check_time_budget; then
+            log "INFO" "Incomplete subtasks detected, returning to CODE phase"
+            log_state_transition "TEST" "CODE" "more-subtasks"
+            STATE="CODE"
+        else
+            log_state_transition "TEST" "PUSH"
+            STATE="PUSH"
+        fi
     else
         log_json "test_failed" "iteration=$ITERATION"
 
@@ -696,6 +732,8 @@ state_push() {
             echo "$GITHUB_TOKEN" | gh auth login --with-token 2>/dev/null || true
         fi
     fi
+    # Configure git to use GitHub token for HTTPS push operations
+    gh auth setup-git 2>/dev/null || true
 
     # Save agent artifact content for PR body before removing from repo
     local progress_for_pr=""
@@ -736,6 +774,12 @@ EOF
         task_short=$(echo "$TASK" | cut -c1-50)
         local pr_title="[Agent] ${task_short}"
         local elapsed=$(( $(date +%s) - JOB_START_TIME ))
+        # Add "Closes #N" footer when job has an associated GitHub Issue
+        local closes_line=""
+        if [[ -n "$ISSUE_NUMBER" && -n "$ISSUE_REPO" ]]; then
+            closes_line=$'\n\nCloses '"${ISSUE_REPO}#${ISSUE_NUMBER}"
+        fi
+
         local pr_body
         pr_body=$(cat <<EOF
 ## Automated PR by Autonomous Coding Agent
@@ -759,7 +803,7 @@ ${approach_for_pr:-_No approach notes._}
 
 ---
 _This PR was created automatically by the 24/7 Autonomous Coding Agent._
-_Review carefully before merging._
+_Review carefully before merging._${closes_line}
 EOF
         )
 
@@ -771,6 +815,17 @@ EOF
             2>&1 | tee -a "$JOB_LOG"; then
             log "INFO" "PR created successfully"
             log_json "pr_created" ""
+
+            # Post comment on the linked GitHub Issue
+            if [[ -n "$ISSUE_NUMBER" && -n "$ISSUE_REPO" ]]; then
+                gh issue comment "$ISSUE_NUMBER" \
+                    --repo "$ISSUE_REPO" \
+                    --body "🤖 自律エージェントがこのIssueに対するPRを作成しました。
+
+Job ID: \`${JOB_ID}\`" \
+                    2>/dev/null || true
+                log "INFO" "Posted comment on issue ${ISSUE_REPO}#${ISSUE_NUMBER}"
+            fi
         else
             log "WARN" "PR creation failed (may already exist)"
             log_json "pr_create_failed" "may already exist"

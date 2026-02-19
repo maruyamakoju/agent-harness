@@ -9,6 +9,7 @@ import os
 import sys
 import tempfile
 import shutil
+import time
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -28,6 +29,7 @@ def test_data_dir():
     for sub in ("pending", "running", "done", "failed"):
         (jobs / sub).mkdir(parents=True)
     logs.mkdir(parents=True)
+    (d / "config").mkdir(parents=True)
 
     # Done job
     done_job = {
@@ -617,6 +619,379 @@ class TestEdgeCases:
         assert r.status_code == 404
         data = r.get_json()
         assert "error" in data
+
+
+# ---------------------------------------------------------------------------
+# Auto-queue API
+# ---------------------------------------------------------------------------
+class TestAutoQueueAPI:
+    def test_get_default_when_no_file(self, client, test_data_dir):
+        # Ensure config file does not exist
+        cfg = test_data_dir / "config" / "auto-queue-config.json"
+        cfg.unlink(missing_ok=True)
+        r = client.get("/api/autoqueue")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["enabled"] is False
+        assert data["trigger_threshold"] == 2
+        assert data["tasks"] == []
+
+    def test_get_returns_file_content(self, client, test_data_dir):
+        config = {"enabled": True, "trigger_threshold": 3, "tasks": []}
+        cfg = test_data_dir / "config" / "auto-queue-config.json"
+        cfg.write_text(json.dumps(config), encoding="utf-8")
+        try:
+            r = client.get("/api/autoqueue")
+            assert r.status_code == 200
+            data = r.get_json()
+            assert data["enabled"] is True
+            assert data["trigger_threshold"] == 3
+        finally:
+            cfg.unlink(missing_ok=True)
+
+    def test_put_valid(self, client, test_data_dir):
+        payload = {
+            "enabled": True,
+            "trigger_threshold": 3,
+            "tasks": [
+                {
+                    "id": "task1",
+                    "repo": "owner/repo",
+                    "task": "do something",
+                    "enabled": True,
+                    "queued": False,
+                    "time_budget_sec": 3600,
+                }
+            ],
+        }
+        r = client.put("/api/autoqueue", json=payload)
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["enabled"] is True
+        assert data["trigger_threshold"] == 3
+        assert len(data["tasks"]) == 1
+        # Cleanup
+        (test_data_dir / "config" / "auto-queue-config.json").unlink(missing_ok=True)
+
+    def test_put_enabled_not_bool_returns_400(self, client):
+        r = client.put("/api/autoqueue", json={
+            "enabled": "yes", "trigger_threshold": 2, "tasks": []
+        })
+        assert r.status_code == 400
+
+    def test_put_threshold_not_int_returns_400(self, client):
+        r = client.put("/api/autoqueue", json={
+            "enabled": True, "trigger_threshold": "3", "tasks": []
+        })
+        assert r.status_code == 400
+
+    def test_put_task_missing_task_field_returns_400(self, client):
+        payload = {
+            "enabled": False,
+            "trigger_threshold": 2,
+            "tasks": [{"id": "t1", "repo": "owner/repo"}],  # missing task, enabled, queued
+        }
+        r = client.put("/api/autoqueue", json=payload)
+        assert r.status_code == 400
+
+    def test_put_task_enabled_not_bool_returns_400(self, client):
+        payload = {
+            "enabled": False,
+            "trigger_threshold": 2,
+            "tasks": [{"id": "t1", "repo": "owner/repo", "task": "do it", "enabled": "yes", "queued": False}],
+        }
+        r = client.put("/api/autoqueue", json=payload)
+        assert r.status_code == 400
+
+    def test_put_roundtrip(self, client, test_data_dir):
+        payload = {"enabled": False, "trigger_threshold": 5, "tasks": []}
+        client.put("/api/autoqueue", json=payload)
+        r = client.get("/api/autoqueue")
+        assert r.get_json()["trigger_threshold"] == 5
+        # Cleanup
+        (test_data_dir / "config" / "auto-queue-config.json").unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Job State API
+# ---------------------------------------------------------------------------
+class TestJobStateAPI:
+    def test_state_with_events(self, client):
+        r = client.get("/api/jobs/2026-01-01T120000Z-test-done/state")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["state"] == "DONE"
+        assert data["iteration"] == 1
+        assert data["elapsed_sec"] == 1200
+        assert data["last_event"] == "job_done"
+
+    def test_state_nonexistent_returns_null(self, client):
+        r = client.get("/api/jobs/nonexistent-job/state")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["state"] is None
+        assert data["iteration"] == 0
+        assert data["elapsed_sec"] is None
+
+    def test_state_sanitizes_job_id(self, client):
+        # Path traversal is handled safely - Flask routing or sanitization prevents access
+        # Flask normalizes the URL so it may return 404 before reaching the handler
+        r = client.get("/api/jobs/../../etc/passwd/state")
+        assert r.status_code in (200, 404)
+        assert r.status_code != 500
+
+
+# ---------------------------------------------------------------------------
+# PRs API
+# ---------------------------------------------------------------------------
+class TestPRsAPI:
+    def test_no_repos_returns_empty_list(self, client):
+        # No repos param → empty list without needing a GitHub token
+        r = client.get("/api/prs")
+        assert r.status_code == 200
+        assert r.get_json() == []
+
+    def test_no_token_returns_503(self, client):
+        # GITHUB_TOKEN not set in test environment → 503 when repos requested
+        r = client.get("/api/prs?repos=owner/repo")
+        assert r.status_code == 503
+
+    def test_no_token_empty_repos_returns_empty(self, client):
+        # Even without token, empty repos param → 200 []
+        r = client.get("/api/prs?repos=")
+        assert r.status_code == 200
+        assert r.get_json() == []
+
+
+# ---------------------------------------------------------------------------
+# Costs API
+# ---------------------------------------------------------------------------
+class TestCostsAPI:
+    def test_costs_no_events(self, client):
+        r = client.get("/api/costs")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["total_usd"] == 0.0
+        assert data["jobs"] == []
+
+    def test_costs_with_cleanup_event(self, client, test_data_dir):
+        jp = test_data_dir / "logs" / "2026-01-01T120000Z-test-done.jsonl"
+        original = jp.read_text(encoding="utf-8")
+        jp.write_text(original + '\n' + json.dumps({
+            "timestamp": "2026-01-01T12:20:02Z",
+            "job_id": "2026-01-01T120000Z-test-done",
+            "event": "cleanup",
+            "state": "DONE",
+            "iteration": 1,
+            "elapsed_sec": 1201,
+            "detail": "duration=1201s iterations=1 cost=0.0512",
+        }), encoding="utf-8")
+        try:
+            r = client.get("/api/costs")
+            assert r.status_code == 200
+            data = r.get_json()
+            assert data["total_usd"] == pytest.approx(0.0512)
+            assert len(data["jobs"]) == 1
+            assert data["jobs"][0]["job_id"] == "2026-01-01T120000Z-test-done"
+            assert data["jobs"][0]["cost_usd"] == pytest.approx(0.0512)
+        finally:
+            jp.write_text(original, encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Kanban SSE Stream API
+# ---------------------------------------------------------------------------
+class TestKanbanStreamAPI:
+    def test_kanban_stream_content_type(self, client):
+        # Verify SSE endpoint returns correct Content-Type
+        # Use buffered=False and read only headers to avoid hanging on stream
+        with client.get("/api/events/kanban-stream", buffered=False) as r:
+            assert r.content_type.startswith("text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# Pagination
+# ---------------------------------------------------------------------------
+class TestPagination:
+    def test_default_returns_all_when_under_limit(self, client):
+        r = client.get("/api/jobs")
+        assert r.status_code == 200
+        jobs = r.get_json()
+        assert len(jobs) == 3
+        assert r.headers.get("X-Total-Count") == "3"
+
+    def test_page1_per_page2(self, client):
+        r = client.get("/api/jobs?page=1&per_page=2")
+        assert r.status_code == 200
+        jobs = r.get_json()
+        assert len(jobs) == 2
+        assert r.headers.get("X-Total-Count") == "3"
+        assert r.headers.get("X-Page") == "1"
+        assert r.headers.get("X-Per-Page") == "2"
+
+    def test_page2_per_page2(self, client):
+        r = client.get("/api/jobs?page=2&per_page=2")
+        assert r.status_code == 200
+        jobs = r.get_json()
+        assert len(jobs) == 1  # 3 total: page 2 has 1 remaining
+        assert r.headers.get("X-Total-Count") == "3"
+
+    def test_page_beyond_range_returns_empty(self, client):
+        r = client.get("/api/jobs?page=99&per_page=50")
+        assert r.status_code == 200
+        jobs = r.get_json()
+        assert len(jobs) == 0
+        assert r.headers.get("X-Total-Count") == "3"
+
+    def test_per_page_capped_at_200(self, client):
+        r = client.get("/api/jobs?per_page=9999")
+        assert r.status_code == 200
+        assert r.headers.get("X-Per-Page") == "200"
+
+    def test_x_total_count_header_present(self, client):
+        r = client.get("/api/jobs?status=done")
+        assert r.status_code == 200
+        assert r.headers.get("X-Total-Count") == "1"
+
+
+# ---------------------------------------------------------------------------
+# Log Truncation
+# ---------------------------------------------------------------------------
+class TestLogTruncation:
+    def test_tail_uses_deque_based_read(self, client):
+        r = client.get("/api/logs/2026-01-01T120000Z-test-done?tail=2")
+        assert r.status_code == 200
+        lines = r.get_data(as_text=True).strip().split("\n")
+        assert len(lines) == 2
+
+    def test_tail_1_returns_last_line(self, client):
+        r = client.get("/api/logs/2026-01-01T120000Z-test-done?tail=1")
+        assert r.status_code == 200
+        text = r.get_data(as_text=True).strip()
+        assert "\n" not in text  # only 1 line
+
+    def test_large_file_truncation(self, client, test_data_dir):
+        import app as app_module
+        log_path = test_data_dir / "logs" / "2026-01-01T120000Z-test-done.log"
+        original = log_path.read_text(encoding="utf-8")
+        original_limit = app_module.MAX_LOG_BYTES
+        try:
+            # Set a very small limit so any file triggers truncation
+            app_module.MAX_LOG_BYTES = 10
+            r = client.get("/api/logs/2026-01-01T120000Z-test-done")
+            assert r.status_code == 200
+            text = r.get_data(as_text=True)
+            assert "先頭部分省略" in text
+        finally:
+            app_module.MAX_LOG_BYTES = original_limit
+
+    def test_small_file_not_truncated(self, client):
+        # Default limit is 5MB; our test log is tiny
+        r = client.get("/api/logs/2026-01-01T120000Z-test-done")
+        assert r.status_code == 200
+        text = r.get_data(as_text=True)
+        assert "先頭部分省略" not in text
+        assert "Starting job" in text
+
+
+# ---------------------------------------------------------------------------
+# Costs Cache
+# ---------------------------------------------------------------------------
+class TestCostCache:
+    def test_cache_populated_after_request(self, client):
+        import app as app_module
+        app_module._costs_cache["data"] = None
+        app_module._costs_cache["ts"] = 0.0
+
+        r = client.get("/api/costs")
+        assert r.status_code == 200
+        assert app_module._costs_cache["data"] is not None
+        assert app_module._costs_cache["ts"] > 0
+
+    def test_cache_served_within_ttl(self, client):
+        import app as app_module
+        # Pre-populate cache with a sentinel value
+        sentinel = {"total_usd": 9999.0, "jobs": [], "_sentinel": True}
+        app_module._costs_cache["data"] = sentinel
+        app_module._costs_cache["ts"] = time.time()  # fresh timestamp
+
+        r = client.get("/api/costs")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["total_usd"] == 9999.0  # served from cache
+
+    def test_cache_expires_after_ttl(self, client):
+        import app as app_module
+        sentinel = {"total_usd": 9999.0, "jobs": []}
+        app_module._costs_cache["data"] = sentinel
+        app_module._costs_cache["ts"] = time.time() - (app_module._COSTS_TTL + 1)
+
+        r = client.get("/api/costs")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["total_usd"] != 9999.0  # cache expired, recalculated
+
+
+# ---------------------------------------------------------------------------
+# Duration Cache
+# ---------------------------------------------------------------------------
+class TestDurationCache:
+    def test_done_job_duration_cached(self, client):
+        import app as app_module
+        app_module._duration_cache.clear()
+
+        # api_jobs enriches done jobs and should populate the cache
+        r = client.get("/api/jobs?status=done")
+        assert r.status_code == 200
+        jobs = r.get_json()
+        assert len(jobs) == 1
+        assert jobs[0]["duration_sec"] == 1200
+
+        # Cache should now contain the done job's duration
+        assert "2026-01-01T120000Z-test-done" in app_module._duration_cache
+        assert app_module._duration_cache["2026-01-01T120000Z-test-done"] == 1200
+
+    def test_pending_job_not_cached(self, client, test_data_dir):
+        import app as app_module
+        pending = {
+            "id": "2026-01-04T000000Z-pending-cache-test",
+            "repo": "https://github.com/test/x.git",
+            "task": "cache test",
+            "commands": {"setup": [], "test": []},
+            "time_budget_sec": 3600,
+            "max_retries": 2,
+            "gpu_required": False,
+            "created_at": "2026-01-04T00:00:00Z",
+        }
+        p = test_data_dir / "jobs" / "pending" / "2026-01-04T000000Z-pending-cache-test.json"
+        p.write_text(json.dumps(pending), encoding="utf-8")
+        app_module._duration_cache.clear()
+        try:
+            r = client.get("/api/jobs?status=pending")
+            assert r.status_code == 200
+            jobs = r.get_json()
+            pending_job = next((j for j in jobs if j["id"] == pending["id"]), None)
+            assert pending_job is not None
+            assert pending_job["duration_sec"] is None
+            # Pending job must NOT be in cache
+            assert pending["id"] not in app_module._duration_cache
+        finally:
+            p.unlink(missing_ok=True)
+
+    def test_cached_value_returned_on_second_call(self, client):
+        import app as app_module
+        app_module._duration_cache.clear()
+
+        # First call
+        client.get("/api/jobs?status=done")
+        assert "2026-01-01T120000Z-test-done" in app_module._duration_cache
+
+        # Overwrite cache with sentinel to verify second call uses cache
+        app_module._duration_cache["2026-01-01T120000Z-test-done"] = 42
+
+        r = client.get("/api/jobs?status=done")
+        jobs = r.get_json()
+        assert jobs[0]["duration_sec"] == 42  # returned from cache, not re-read
 
 
 # ---------------------------------------------------------------------------

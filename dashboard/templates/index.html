@@ -94,10 +94,11 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 
 /* Feed */
 .feed { list-style: none; }
-.feed li { padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 12px; font-size: 13px; }
+.feed li { padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; font-size: 13px; }
 .feed li:last-child { border-bottom: none; }
-.feed .time { font-size: 12px; color: var(--text2); flex-shrink: 0; width: 80px; }
-.feed .event-name { font-weight: 500; flex-shrink: 0; width: 140px; }
+.feed .time { font-size: 12px; color: var(--text2); flex-shrink: 0; width: 75px; }
+.feed .task-text { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.feed .dur { font-size: 12px; color: var(--text2); flex-shrink: 0; }
 
 /* Job detail */
 .job-detail { padding: 12px 14px; background: var(--bg); border-top: 1px solid var(--border); }
@@ -135,12 +136,41 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .loading-text { color: var(--text2); font-style: italic; }
 .empty-text { color: var(--text2); text-align: center; padding: 24px; }
 
+/* Kanban board */
+.kanban-board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.kanban-col { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; min-height: 200px; }
+.kanban-col-header { font-weight: 600; font-size: 13px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+.kanban-count { background: var(--bg3); border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 600; }
+.kanban-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 8px; cursor: pointer; transition: border-color .15s; }
+.kanban-card:hover { border-color: var(--accent); }
+.kanban-card .card-repo { font-size: 11px; color: var(--text2); margin-bottom: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.kanban-card .card-task { font-size: 12px; line-height: 1.4; margin-bottom: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.kanban-card .card-meta { font-size: 11px; color: var(--text2); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.phase-badge { padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; background: rgba(88,166,255,.2); color: var(--accent); }
+
+/* Toggle switch */
+.toggle-wrap { display: flex; align-items: center; gap: 8px; }
+.toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg3); border: 1px solid var(--border); border-radius: 22px; transition: .2s; }
+.toggle-slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background: var(--text2); border-radius: 50%; transition: .2s; }
+.toggle input:checked + .toggle-slider { background: var(--accent); border-color: var(--accent); }
+.toggle input:checked + .toggle-slider:before { transform: translateX(18px); background: #000; }
+
+/* Auto-queue table */
+.aq-table input[type="text"] { padding: 4px 8px; font-size: 12px; }
+.aq-table input[type="number"] { padding: 4px 8px; font-size: 12px; width: 80px; }
+
 /* Responsive */
+@media (max-width: 900px) {
+  .kanban-board { grid-template-columns: repeat(2, 1fr); }
+}
 @media (max-width: 640px) {
   .content { padding: 12px; }
   .form-row { grid-template-columns: 1fr; }
   .cards { grid-template-columns: 1fr 1fr; }
   .tab { padding: 8px 12px; font-size: 13px; }
+  .kanban-board { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -163,6 +193,9 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
   <div class="tab" data-tab="logs">ログ</div>
   <div class="tab" data-tab="notifications">通知</div>
   <div class="tab" data-tab="settings">設定</div>
+  <div class="tab" data-tab="kanban">Kanban</div>
+  <div class="tab" data-tab="prs">PR追跡</div>
+  <div class="tab" data-tab="autoqueue">Auto-queue</div>
 </div>
 
 <div class="content">
@@ -176,7 +209,26 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
     <div class="card"><div class="label">実行中</div><div class="value" id="c-running">--</div></div>
     <div class="card"><div class="label">完了</div><div class="value" id="c-done">--</div></div>
     <div class="card"><div class="label">失敗</div><div class="value" id="c-failed">--</div></div>
+    <div class="card" id="parallel-card" style="display:none"><div class="label">並列実行</div><div class="value" id="c-parallel">--</div><div class="sub" id="c-parallel-sub"></div></div>
     <div class="card" id="gpu-card" style="display:none"><div class="label">GPU</div><div class="value" id="c-gpu" style="font-size:16px;">--</div><div class="sub" id="c-gpu-sub"></div></div>
+    <div class="card" id="cost-card"><div class="label">累計コスト</div><div class="value" id="c-cost" style="font-size:20px;">--</div><div class="sub" id="c-cost-sub"></div></div>
+  </div>
+  <div style="display:flex;gap:24px;align-items:flex-start;margin-bottom:24px;flex-wrap:wrap;">
+    <div style="flex:0 0 auto;">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:8px;letter-spacing:.5px;">成功率</div>
+      <svg id="donut-chart" width="120" height="120" viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r="46" fill="none" stroke="var(--bg3)" stroke-width="18"/>
+        <circle id="donut-done" cx="60" cy="60" r="46" fill="none" stroke="var(--green)" stroke-width="18"
+                stroke-dasharray="0 289" stroke-dashoffset="72" transform="rotate(-90 60 60)"/>
+        <circle id="donut-failed" cx="60" cy="60" r="46" fill="none" stroke="var(--red)" stroke-width="18"
+                stroke-dasharray="0 289" stroke-dashoffset="72" transform="rotate(-90 60 60)"/>
+        <circle id="donut-running" cx="60" cy="60" r="46" fill="none" stroke="var(--accent)" stroke-width="18"
+                stroke-dasharray="0 289" stroke-dashoffset="72" transform="rotate(-90 60 60)"/>
+        <text x="60" y="55" text-anchor="middle" fill="var(--text)" font-size="16" font-weight="600" id="donut-pct">--</text>
+        <text x="60" y="70" text-anchor="middle" fill="var(--text2)" font-size="10">成功率</text>
+      </svg>
+      <div id="donut-legend" style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.8;"></div>
+    </div>
   </div>
   <h3 style="margin-bottom:12px">最近のアクティビティ</h3>
   <ul class="feed" id="activity-feed"><li class="loading-text">読み込み中...</li></ul>
@@ -196,6 +248,10 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
     <thead><tr><th>ジョブID</th><th>リポジトリ</th><th>タスク</th><th>状態</th><th>所要時間</th><th>操作</th></tr></thead>
     <tbody id="jobs-tbody"><tr><td colspan="6" class="loading-text">読み込み中...</td></tr></tbody>
   </table>
+  <div style="text-align:center;margin-top:16px;" id="jobs-load-more-wrap" style="display:none;">
+    <button class="btn" id="jobs-load-more" style="display:none;" onclick="JobsTab.loadMore()">もっと読み込む</button>
+    <span id="jobs-count-info" style="margin-left:12px;font-size:12px;color:var(--text2);"></span>
+  </div>
 </div>
 
 <!-- Submit -->
@@ -308,10 +364,61 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
     <div class="env-list">
       <p><code>MAX_JOBS_PER_DAY</code> - 1日あたりのジョブ上限（デフォルト: 20）</p>
       <p><code>JOB_COOLDOWN</code> - ジョブ間のクールダウン秒数（デフォルト: 60）</p>
-      <p><code>DEFAULT_MODEL</code> - コーディング用Claudeモデル（デフォルト: claude-sonnet-4-5-20250929）</p>
+      <p><code>DEFAULT_MODEL</code> - コーディング用Claudeモデル（デフォルト: claude-sonnet-4-6）</p>
       <p><code>POLL_INTERVAL</code> - ジョブキューのポーリング間隔（デフォルト: 30秒）</p>
       <p><code>AGENT_WATCH_REPOS</code> - "agent"ラベルのIssueを監視するGitHubリポジトリ</p>
     </div>
+  </div>
+
+  <div class="settings-section">
+    <h4>ジョブコスト内訳</h4>
+    <div id="cost-chart-wrap" style="margin-bottom:16px;">
+      <svg id="cost-bar-chart" width="100%" height="80" style="display:block;"></svg>
+    </div>
+    <table id="cost-detail-table">
+      <thead><tr><th>ジョブID</th><th>コスト(USD)</th><th>日時</th></tr></thead>
+      <tbody id="cost-detail-tbody"><tr><td colspan="3" class="loading-text">読み込み中...</td></tr></tbody>
+    </table>
+    <div style="margin-top:8px;font-weight:600;">合計: <span id="cost-total">--</span></div>
+  </div>
+</div>
+
+<!-- Kanban -->
+<div class="panel" id="panel-kanban">
+  <div class="section-header">
+    <h3>Kanbanボード</h3>
+    <button class="btn btn-sm" id="kanban-refresh-btn">更新</button>
+  </div>
+  <div class="kanban-board" id="kanban-board">
+    <div class="kanban-col"><div class="loading-text">読み込み中...</div></div>
+  </div>
+</div>
+
+<!-- PR tracking -->
+<div class="panel" id="panel-prs">
+  <div class="section-header">
+    <h3>PR追跡</h3>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input type="text" id="pr-repos" placeholder="owner/repo1,owner/repo2" style="width:auto;min-width:280px;">
+      <button class="btn btn-sm primary" id="pr-load-btn">読み込み</button>
+    </div>
+  </div>
+  <div id="pr-content">
+    <p class="empty-text">リポジトリを入力して読み込みボタンを押してください。</p>
+  </div>
+</div>
+
+<!-- Auto-queue -->
+<div class="panel" id="panel-autoqueue">
+  <div class="section-header">
+    <h3>Auto-queue設定</h3>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-sm primary" id="aq-save-btn">保存</button>
+      <button class="btn btn-sm" id="aq-reset-btn">キュー状態リセット</button>
+    </div>
+  </div>
+  <div id="autoqueue-content">
+    <div class="loading-text">読み込み中...</div>
   </div>
 </div>
 
@@ -477,6 +584,12 @@ const StatusUI = {
     Utils.$('c-done').textContent = c.done ?? '--';
     Utils.$('c-failed').textContent = c.failed ?? '--';
 
+    if (hb.parallel) {
+      Utils.$('parallel-card').style.display = '';
+      Utils.$('c-parallel').textContent = hb.parallel.running + '/' + hb.parallel.max;
+      Utils.$('c-parallel-sub').textContent = '実行中スロット';
+    }
+
     if (hb.gpu) {
       Utils.$('gpu-card').style.display = '';
       Utils.$('c-gpu').textContent = hb.gpu.name || '利用可能';
@@ -543,6 +656,69 @@ const SSE = {
 };
 
 // ===========================================================================
+// SVG Charts
+// ===========================================================================
+const Charts = {
+  /** Draw a donut chart showing done/failed/running/pending proportions. */
+  drawDonut(done, failed, running, pending) {
+    const total = done + failed + running + pending || 1;
+    const r = 46;
+    const circ = 2 * Math.PI * r; // ≈ 289
+    const segments = [
+      { id: 'donut-done',    val: done,    color: 'var(--green)' },
+      { id: 'donut-running', val: running, color: 'var(--accent)' },
+      { id: 'donut-failed',  val: failed,  color: 'var(--red)' },
+    ];
+    let offset = 0; // starts at 12 o'clock (transform rotate -90 in SVG)
+    for (const seg of segments) {
+      const el = Utils.$(seg.id);
+      if (!el) continue;
+      const len = (seg.val / total) * circ;
+      el.setAttribute('stroke-dasharray', len + ' ' + (circ - len));
+      el.setAttribute('stroke-dashoffset', -offset);
+      offset += len;
+    }
+    const pctEl = Utils.$('donut-pct');
+    if (pctEl) {
+      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+      pctEl.textContent = pct + '%';
+    }
+    const legend = Utils.$('donut-legend');
+    if (legend) {
+      legend.innerHTML =
+        `<span style="color:var(--green)">■</span> 完了 ${done}` +
+        `&nbsp;&nbsp;<span style="color:var(--red)">■</span> 失敗 ${failed}<br>` +
+        `<span style="color:var(--accent)">■</span> 実行中 ${running}` +
+        `&nbsp;&nbsp;<span style="color:var(--text2)">■</span> 待機 ${pending}`;
+    }
+  },
+
+  /** Draw a bar chart of per-job cost for the last N jobs. */
+  drawCostChart(jobs) {
+    const svg = Utils.$('cost-bar-chart');
+    if (!svg) return;
+    const recent = jobs.slice(-20);
+    if (!recent.length) { svg.style.display = 'none'; return; }
+    svg.style.display = 'block';
+    const svgW = svg.clientWidth || 600;
+    const svgH = 80;
+    const maxCost = Math.max(...recent.map(j => j.cost_usd), 0.0001);
+    const barW = Math.max(4, Math.floor((svgW - recent.length * 2) / recent.length));
+    const bars = recent.map((j, i) => {
+      const h = Math.max(2, Math.round((j.cost_usd / maxCost) * (svgH - 16)));
+      const x = i * (barW + 2);
+      const y = svgH - h - 2;
+      const label = j.cost_usd >= 0.01 ? '$' + j.cost_usd.toFixed(2) : '';
+      return `<rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="var(--accent)" opacity="0.7" rx="2">
+        <title>${j.job_id}: $${j.cost_usd.toFixed(4)}</title></rect>` +
+        (label ? `<text x="${x + barW/2}" y="${svgH}" text-anchor="middle" font-size="8" fill="var(--text2)">${label}</text>` : '');
+    }).join('');
+    svg.innerHTML = bars;
+    svg.setAttribute('viewBox', '0 0 ' + (recent.length * (barW + 2)) + ' ' + svgH);
+  },
+};
+
+// ===========================================================================
 // Dashboard Tab
 // ===========================================================================
 const DashboardTab = {
@@ -550,6 +726,8 @@ const DashboardTab = {
     try {
       const data = await Api.getJSON('/api/status');
       StatusUI.update(data);
+      const c = data.counts || {};
+      Charts.drawDonut(c.done || 0, c.failed || 0, c.running || 0, c.pending || 0);
     } catch (e) {
       console.error('Status load failed:', e);
     }
@@ -563,26 +741,45 @@ const DashboardTab = {
       }
     } catch (e) { /* GPU info is optional */ }
 
+    try {
+      const costs = await Api.getJSON('/api/costs').catch(() => null);
+      if (costs) {
+        Utils.$('c-cost').textContent = '$' + costs.total_usd.toFixed(4);
+        Utils.$('c-cost-sub').textContent = costs.jobs.length + 'ジョブ分';
+      }
+    } catch (e) { /* cost is optional */ }
+
     this.loadActivity();
   },
 
   async loadActivity() {
     const feed = Utils.$('activity-feed');
     try {
-      // Single batch call instead of N+1 calls
-      const items = await Api.getJSON('/api/activity?limit=15');
-      if (!items.length) {
-        feed.innerHTML = '<li class="empty-text">イベントがありません。</li>';
+      const jobs = await Api.getJSON('/api/jobs');
+      const recent = jobs.slice(0, 12);
+      if (!recent.length) {
+        feed.innerHTML = '<li class="empty-text">ジョブがまだありません。</li>';
         return;
       }
-      feed.innerHTML = items.map(ev => {
-        const t = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : '';
-        const color = Utils.eventColor(ev.event);
-        const styleAttr = color ? ` style="color:${color}"` : '';
-        return `<li>
+      const STATUS_ICON = { done: '✅', failed: '❌', running: '⏳', pending: '⏸️' };
+      const STATUS_COLOR = { done: 'var(--green)', failed: 'var(--red)', running: 'var(--accent)', pending: 'var(--yellow)' };
+      feed.innerHTML = recent.map(j => {
+        const t = j.created_at ? new Date(j.created_at).toLocaleTimeString() : '';
+        const icon = STATUS_ICON[j.status] || '❓';
+        const color = STATUS_COLOR[j.status] || '';
+        const label = STATUS_LABELS[j.status] || j.status;
+        const task = Utils.escHtml(Utils.truncate(j.task || '（タスク未設定）', 55));
+        const repo = Utils.escHtml(Utils.repoShort(j.repo));
+        const dur = j.duration_sec != null ? Utils.fmtDuration(j.duration_sec) : '';
+        return `<li style="cursor:pointer" onclick="JobsTab.toggleDetail('${Utils.escHtml(j.id)}');document.querySelector('[data-tab=jobs]').click()">
           <span class="time">${t}</span>
-          <span class="event-name"${styleAttr}>${Utils.escHtml(ev.event || '')}</span>
-          <span style="color:var(--text2)">${Utils.escHtml(ev.job_id || '')} ${ev.detail ? '- ' + Utils.escHtml(Utils.truncate(ev.detail, 80)) : ''}</span>
+          <span style="color:${color};flex-shrink:0;font-size:15px;">${icon}</span>
+          <span style="color:${color};flex-shrink:0;font-size:12px;font-weight:600;min-width:50px;">${label}</span>
+          <span class="task-text">
+            <span style="font-weight:500;">${task}</span>
+            <span style="color:var(--text2);font-size:12px;margin-left:6px;">${repo}</span>
+          </span>
+          ${dur ? `<span class="dur">${dur}</span>` : ''}
         </li>`;
       }).join('');
     } catch (e) {
@@ -595,11 +792,39 @@ const DashboardTab = {
 // Jobs Tab
 // ===========================================================================
 const JobsTab = {
+  _page: 1,
+  _perPage: 50,
+  _hasMore: false,
+  _total: 0,
+
+  _buildUrl(page) {
+    const base = '/api/jobs?page=' + page + '&per_page=' + this._perPage;
+    return State.currentFilter === 'all' ? base : base + '&status=' + State.currentFilter;
+  },
+
   async load() {
-    const url = State.currentFilter === 'all' ? '/api/jobs' : '/api/jobs?status=' + State.currentFilter;
+    this._page = 1;
+    State.allJobs = [];
     try {
-      // Server now enriches with duration_sec - no N+1 calls needed
-      State.allJobs = await Api.getJSON(url);
+      const r = await Api.fetch(this._buildUrl(1));
+      const jobs = await r.json();
+      this._total = parseInt(r.headers.get('X-Total-Count') || '0');
+      State.allJobs = jobs;
+      this._hasMore = State.allJobs.length < this._total;
+      this.applySearch();
+    } catch (e) {
+      Toast.show(e.message, 'error');
+    }
+  },
+
+  async loadMore() {
+    this._page++;
+    try {
+      const r = await Api.fetch(this._buildUrl(this._page));
+      const jobs = await r.json();
+      this._total = parseInt(r.headers.get('X-Total-Count') || '0');
+      State.allJobs = State.allJobs.concat(jobs);
+      this._hasMore = State.allJobs.length < this._total;
       this.applySearch();
     } catch (e) {
       Toast.show(e.message, 'error');
@@ -619,6 +844,13 @@ const JobsTab = {
 
   render(jobs) {
     const tbody = Utils.$('jobs-tbody');
+    // Update load-more button visibility
+    const loadMoreBtn = Utils.$('jobs-load-more');
+    if (loadMoreBtn) loadMoreBtn.style.display = this._hasMore ? '' : 'none';
+    const countInfo = Utils.$('jobs-count-info');
+    if (countInfo && this._total > 0) {
+      countInfo.textContent = State.allJobs.length + ' / ' + this._total + ' 件表示中';
+    }
     if (!jobs.length) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty-text">ジョブが見つかりません。</td></tr>';
       return;
@@ -896,6 +1128,297 @@ const SettingsTab = {
       console.error('Log stats load failed:', e);
     }
   },
+
+  async loadCosts() {
+    try {
+      const data = await Api.getJSON('/api/costs');
+      Charts.drawCostChart(data.jobs || []);
+      const tbody = Utils.$('cost-detail-tbody');
+      if (!data.jobs.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="empty-text">コストデータがありません。</td></tr>';
+      } else {
+        tbody.innerHTML = data.jobs.map(j => {
+          const t = j.timestamp ? new Date(j.timestamp).toLocaleString() : '';
+          return `<tr>
+            <td style="font-family:monospace;font-size:12px">${Utils.escHtml(j.job_id)}</td>
+            <td>$${j.cost_usd.toFixed(4)}</td>
+            <td style="font-size:12px;color:var(--text2)">${t}</td>
+          </tr>`;
+        }).join('');
+      }
+      Utils.$('cost-total').textContent = '$' + data.total_usd.toFixed(4);
+    } catch (e) {
+      console.error('Cost stats load failed:', e);
+    }
+  },
+};
+
+// ===========================================================================
+// Kanban Tab
+// ===========================================================================
+const KanbanTab = {
+  _timer: null,
+  _sse: null,
+
+  async load() {
+    const board = Utils.$('kanban-board');
+    try {
+      const jobs = await Api.getJSON('/api/jobs');
+      const stateMap = await this._fetchStates(jobs.filter(j => j.status === 'running'));
+      this._renderBoard(jobs, stateMap);
+    } catch (e) {
+      board.innerHTML = `<div style="color:var(--red)">${Utils.escHtml(e.message)}</div>`;
+    }
+  },
+
+  async _fetchStates(runningJobs) {
+    const stateMap = {};
+    if (runningJobs.length) {
+      await Promise.all(runningJobs.map(async j => {
+        try {
+          stateMap[j.id] = await Api.getJSON('/api/jobs/' + j.id + '/state');
+        } catch (e) { /* ignore */ }
+      }));
+    }
+    return stateMap;
+  },
+
+  _renderBoard(jobs, stateMap) {
+    const board = Utils.$('kanban-board');
+    const cols = {
+      pending: jobs.filter(j => j.status === 'pending'),
+      running: jobs.filter(j => j.status === 'running'),
+      done:    jobs.filter(j => j.status === 'done').slice(0, 20),
+      failed:  jobs.filter(j => j.status === 'failed').slice(0, 20),
+    };
+    const HEADERS = { pending: '待機中', running: '実行中', done: '完了', failed: '失敗' };
+    const COLORS = { pending: 'var(--yellow)', running: 'var(--accent)', done: 'var(--green)', failed: 'var(--red)' };
+    board.innerHTML = ['pending', 'running', 'done', 'failed'].map(s =>
+      this._renderCol(s, HEADERS[s], COLORS[s], cols[s], stateMap)
+    ).join('');
+  },
+
+  _renderCol(status, label, color, jobs, stateMap) {
+    const cards = jobs.map(j => {
+      const repo = Utils.escHtml(Utils.repoShort(j.repo));
+      const task = Utils.escHtml(Utils.truncate(j.task || '', 80));
+      const st = stateMap[j.id];
+      let meta = '';
+      if (st && st.state) {
+        meta += `<span class="phase-badge">${Utils.escHtml(st.state)}</span>`;
+        if (st.iteration) meta += `<span>${st.iteration}/10回</span>`;
+        if (st.elapsed_sec != null) meta += `<span>${Utils.fmtDuration(st.elapsed_sec)}</span>`;
+      } else if (j.duration_sec != null) {
+        meta += `<span>${Utils.fmtDuration(j.duration_sec)}</span>`;
+      }
+      return `<div class="kanban-card" onclick="JobsTab.toggleDetail('${j.id}');document.querySelector('[data-tab=jobs]').click()">
+        <div class="card-repo">${repo}</div>
+        <div class="card-task">${task}</div>
+        ${meta ? `<div class="card-meta">${meta}</div>` : ''}
+      </div>`;
+    }).join('') || `<div class="empty-text" style="padding:12px;font-size:12px;">なし</div>`;
+
+    return `<div class="kanban-col">
+      <div class="kanban-col-header" style="color:${color}">
+        ${Utils.escHtml(label)}
+        <span class="kanban-count" style="color:${color}">${jobs.length}</span>
+      </div>
+      ${cards}
+    </div>`;
+  },
+
+  startAutoRefresh() {
+    this.stopAutoRefresh();
+    this._sse = new EventSource('/api/events/kanban-stream');
+    this._sse.onmessage = async (e) => {
+      const jobs = JSON.parse(e.data);
+      const stateMap = await this._fetchStates(jobs.filter(j => j.status === 'running'));
+      this._renderBoard(jobs, stateMap);
+    };
+    this._sse.onerror = () => {
+      this.stopAutoRefresh();
+      this._timer = setInterval(() => this.load(), 10000); // フォールバック
+    };
+  },
+
+  stopAutoRefresh() {
+    if (this._sse) { this._sse.close(); this._sse = null; }
+    if (this._timer) { clearInterval(this._timer); this._timer = null; }
+  },
+};
+
+// ===========================================================================
+// PR Tracking Tab
+// ===========================================================================
+const PRTab = {
+  async load() {
+    const repos = (Utils.$('pr-repos').value || '').trim();
+    const content = Utils.$('pr-content');
+    if (!repos) {
+      content.innerHTML = '<p class="empty-text">リポジトリを入力してください（例: owner/repo1,owner/repo2）</p>';
+      return;
+    }
+    content.innerHTML = '<p class="loading-text">読み込み中...</p>';
+    try {
+      const prs = await Api.getJSON('/api/prs?repos=' + encodeURIComponent(repos));
+      if (!prs.length) {
+        content.innerHTML = '<p class="empty-text">オープンなPRはありません。</p>';
+        return;
+      }
+      content.innerHTML = `<table>
+        <thead><tr><th>#</th><th>リポジトリ</th><th>タイトル</th><th>ブランチ</th><th>作成日</th><th>作者</th><th></th></tr></thead>
+        <tbody>${prs.map(pr => {
+          const created = pr.created_at ? new Date(pr.created_at).toLocaleDateString() : '';
+          const draft = pr.draft ? '<span style="color:var(--text2);font-size:11px;">[Draft]</span> ' : '';
+          return `<tr>
+            <td style="font-family:monospace">#${pr.number}</td>
+            <td style="font-size:12px">${Utils.escHtml(pr.repo)}</td>
+            <td>${draft}${Utils.escHtml(Utils.truncate(pr.title, 60))}</td>
+            <td style="font-family:monospace;font-size:12px">${Utils.escHtml(pr.head_ref)}</td>
+            <td style="font-size:12px">${created}</td>
+            <td style="font-size:12px">${Utils.escHtml(pr.user)}</td>
+            <td><a href="${Utils.escHtml(pr.html_url)}" target="_blank" rel="noopener" class="btn btn-sm">開く</a></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+    } catch (e) {
+      content.innerHTML = `<p style="color:var(--red)">${Utils.escHtml(e.message)}</p>`;
+    }
+  },
+
+  init() {
+    Utils.$('pr-load-btn').addEventListener('click', () => this.load());
+    Utils.$('pr-repos').addEventListener('keydown', e => { if (e.key === 'Enter') this.load(); });
+  },
+};
+
+// ===========================================================================
+// Auto-queue Tab
+// ===========================================================================
+const AutoQueueTab = {
+  _config: null,
+
+  async load() {
+    try {
+      this._config = await Api.getJSON('/api/autoqueue');
+      this._render();
+    } catch (e) {
+      Utils.$('autoqueue-content').innerHTML = `<p style="color:var(--red)">${Utils.escHtml(e.message)}</p>`;
+    }
+  },
+
+  _render() {
+    const cfg = this._config;
+    const tasks = cfg.tasks || [];
+    const rowsHtml = tasks.map((t, i) => `
+      <tr data-idx="${i}">
+        <td><input type="text" value="${Utils.escHtml(t.id || '')}" data-field="id" style="width:100px;"></td>
+        <td><input type="checkbox" ${t.enabled ? 'checked' : ''} data-field="enabled" style="width:auto;"></td>
+        <td><input type="text" value="${Utils.escHtml(t.task || '')}" data-field="task" style="min-width:200px;"></td>
+        <td><input type="text" value="${Utils.escHtml(t.repo || '')}" data-field="repo" style="min-width:140px;"></td>
+        <td><input type="number" value="${t.time_budget_sec || 3600}" data-field="time_budget_sec" style="width:80px;"></td>
+        <td style="color:${t.queued ? 'var(--green)' : 'var(--text2)'};">${t.queued ? '投入済' : '未投入'}</td>
+        <td><button class="btn btn-sm danger" onclick="AutoQueueTab._deleteTask(${i})">削除</button></td>
+      </tr>`).join('');
+
+    Utils.$('autoqueue-content').innerHTML = `
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;">
+        <span>自動投入</span>
+        <label class="toggle">
+          <input type="checkbox" id="aq-enabled" ${cfg.enabled ? 'checked' : ''}>
+          <span class="toggle-slider"></span>
+        </label>
+        <span style="color:var(--text2);font-size:13px;">しきい値:</span>
+        <input type="number" id="aq-threshold" value="${cfg.trigger_threshold}" min="0" max="100" style="width:70px;">
+        <span style="color:var(--text2);font-size:12px;">未満のとき自動投入</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <h4 style="font-size:14px;">タスク一覧</h4>
+        <button class="btn btn-sm" id="aq-add-btn">＋ タスク追加</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="aq-table">
+          <thead><tr><th>ID</th><th>有効</th><th>タスク内容</th><th>リポジトリ</th><th>制限時間(秒)</th><th>状態</th><th></th></tr></thead>
+          <tbody id="aq-tasks-tbody">${rowsHtml || '<tr><td colspan="7" class="empty-text">タスクがありません。</td></tr>'}</tbody>
+        </table>
+      </div>`;
+
+    Utils.$('aq-add-btn').addEventListener('click', () => this.addTask());
+  },
+
+  _collectConfig() {
+    const enabled = Utils.$('aq-enabled').checked;
+    const threshold = parseInt(Utils.$('aq-threshold').value) || 2;
+    const rows = document.querySelectorAll('#aq-tasks-tbody tr[data-idx]');
+    const tasks = this._config.tasks.map((orig, i) => {
+      const row = document.querySelector(`#aq-tasks-tbody tr[data-idx="${i}"]`);
+      if (!row) return orig;
+      return {
+        ...orig,
+        id: row.querySelector('[data-field="id"]').value.trim(),
+        enabled: row.querySelector('[data-field="enabled"]').checked,
+        task: row.querySelector('[data-field="task"]').value.trim(),
+        repo: row.querySelector('[data-field="repo"]').value.trim(),
+        time_budget_sec: parseInt(row.querySelector('[data-field="time_budget_sec"]').value) || 3600,
+      };
+    });
+    return { enabled, trigger_threshold: threshold, tasks };
+  },
+
+  async save() {
+    const cfg = this._collectConfig();
+    try {
+      const r = await Api.fetch('/api/autoqueue', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cfg),
+      });
+      this._config = await r.json();
+      this._render();
+      Toast.show('保存しました', 'success');
+    } catch (e) { Toast.show(e.message, 'error'); }
+  },
+
+  async reset() {
+    if (!confirm('全タスクの投入済み状態をリセットしますか？')) return;
+    const cfg = this._collectConfig();
+    cfg.tasks = cfg.tasks.map(t => ({ ...t, queued: false }));
+    try {
+      const r = await Api.fetch('/api/autoqueue', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cfg),
+      });
+      this._config = await r.json();
+      this._render();
+      Toast.show('リセットしました', 'success');
+    } catch (e) { Toast.show(e.message, 'error'); }
+  },
+
+  addTask() {
+    if (!this._config) return;
+    this._config.tasks.push({
+      id: 'task-' + Date.now(),
+      repo: '',
+      task: '',
+      enabled: true,
+      queued: false,
+      time_budget_sec: 3600,
+    });
+    this._render();
+  },
+
+  _deleteTask(idx) {
+    if (!confirm('タスクを削除しますか？')) return;
+    this._config = this._collectConfig();
+    this._config.tasks.splice(idx, 1);
+    this._render();
+  },
+
+  init() {
+    Utils.$('aq-save-btn').addEventListener('click', () => this.save());
+    Utils.$('aq-reset-btn').addEventListener('click', () => this.reset());
+  },
 };
 
 // ===========================================================================
@@ -907,12 +1430,23 @@ const Router = {
     jobs: () => JobsTab.load(),
     logs: () => LogUI.loadJobSelect(),
     notifications: () => NotifTab.load(),
-    settings: () => SettingsTab.loadLogStats(),
+    settings: () => { SettingsTab.loadLogStats(); SettingsTab.loadCosts(); },
+    kanban: () => { KanbanTab.load(); KanbanTab.startAutoRefresh(); },
+    prs: () => {},
+    autoqueue: () => AutoQueueTab.load(),
   },
+
+  _currentTab: 'dashboard',
 
   init() {
     document.querySelectorAll('.tab').forEach(t => {
       t.addEventListener('click', () => {
+        // Stop kanban auto-refresh when leaving kanban tab
+        if (this._currentTab === 'kanban' && t.dataset.tab !== 'kanban') {
+          KanbanTab.stopAutoRefresh();
+        }
+        this._currentTab = t.dataset.tab;
+
         document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
         document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
         t.classList.add('active');
@@ -958,6 +1492,15 @@ const Router = {
 
   // Notification refresh
   Utils.$('notif-refresh-btn').addEventListener('click', () => NotifTab.load());
+
+  // Kanban refresh button
+  Utils.$('kanban-refresh-btn').addEventListener('click', () => KanbanTab.load());
+
+  // PR Tab
+  PRTab.init();
+
+  // Auto-queue Tab
+  AutoQueueTab.init();
 
   // Initial load
   DashboardTab.load();

@@ -2,7 +2,8 @@
 # =============================================================================
 # agent-loop.sh - 24/7 Main Loop
 # Polls jobs/pending/ every 30s, dispatches to run-job.sh
-# Implements circuit breaker, heartbeat, quota management, graceful shutdown
+# Implements parallel execution, circuit breaker, heartbeat, quota management,
+# graceful shutdown, and auto-queue.
 #
 # Auth: Claude Max Plan ($200/mo) - quota-aware scheduling
 # =============================================================================
@@ -23,14 +24,18 @@ CIRCUIT_BREAKER_PAUSE=600  # 10 minutes
 
 # Quota management (Max plan)
 MAX_JOBS_PER_DAY="${MAX_JOBS_PER_DAY:-20}"
-JOB_COOLDOWN="${JOB_COOLDOWN:-60}"  # seconds between jobs
+JOB_COOLDOWN="${JOB_COOLDOWN:-60}"  # kept for backward compatibility
 DAILY_JOB_COUNT=0
 DAILY_RESET_DATE=""
 QUOTA_COUNTER_FILE="${LOGS_DIR}/quota-counter.json"
 
+# Parallel job tracking
+MAX_PARALLEL_JOBS="${MAX_PARALLEL_JOBS:-2}"
+declare -A RUNNING_PIDS    # pid → job_id
+declare -A RUNNING_FILES   # pid → job_basename
+
 # Graceful shutdown
 RUNNING=true
-CURRENT_JOB_PID=""
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -64,6 +69,7 @@ update_heartbeat() {
     running=$(find "$JOBS_DIR/running" -name "*.json" 2>/dev/null | wc -l)
     done=$(find "$JOBS_DIR/done" -name "*.json" 2>/dev/null | wc -l)
     failed=$(find "$JOBS_DIR/failed" -name "*.json" 2>/dev/null | wc -l)
+    local par_running=${#RUNNING_PIDS[@]}
     jq -n \
         --arg ts "$timestamp" \
         --argjson pend "$pending" \
@@ -73,13 +79,16 @@ update_heartbeat() {
         --argjson consec_fail "$CONSECUTIVE_FAILURES" \
         --argjson daily_jobs "$DAILY_JOB_COUNT" \
         --argjson daily_max "$MAX_JOBS_PER_DAY" \
+        --argjson par_running "$par_running" \
+        --argjson par_max "$MAX_PARALLEL_JOBS" \
         '{
             timestamp: $ts,
             status: "alive",
             auth: "max-plan",
             queue: {pending: $pend, running: $run, done: $dn, failed: $fail},
             consecutive_failures: $consec_fail,
-            quota: {jobs_today: $daily_jobs, max_per_day: $daily_max}
+            quota: {jobs_today: $daily_jobs, max_per_day: $daily_max},
+            parallel: {running: $par_running, max: $par_max}
         }' > "$HEARTBEAT_FILE"
 }
 
@@ -124,6 +133,10 @@ check_daily_quota() {
         DAILY_RESET_DATE="$today"
         save_quota_counter
         log_event "INFO" "QUOTA_RESET" "New day: daily job counter reset"
+        if [[ -x "$SCRIPTS_DIR/cleanup.sh" ]]; then
+            "$SCRIPTS_DIR/cleanup.sh" >> "$LOGS_DIR/cleanup.log" 2>&1 &
+            log_event "INFO" "CLEANUP" "Daily cleanup started (background)"
+        fi
     fi
 
     # Check limit (0 = unlimited)
@@ -139,10 +152,13 @@ check_daily_quota() {
 shutdown_handler() {
     log_event "WARN" "SHUTDOWN" "Received shutdown signal"
     RUNNING=false
-    if [[ -n "$CURRENT_JOB_PID" ]] && kill -0 "$CURRENT_JOB_PID" 2>/dev/null; then
-        log_event "WARN" "SHUTDOWN" "Waiting for current job (PID $CURRENT_JOB_PID) to finish..."
-        wait "$CURRENT_JOB_PID" 2>/dev/null || true
-    fi
+    for pid in "${!RUNNING_PIDS[@]}"; do
+        if kill -0 "$pid" 2>/dev/null; then
+            log_event "WARN" "SHUTDOWN" "Waiting for job (PID $pid id=${RUNNING_PIDS[$pid]}) to finish..."
+            kill -TERM "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+        fi
+    done
     save_quota_counter
     log_event "INFO" "SHUTDOWN" "Agent loop stopped gracefully"
     exit 0
@@ -151,81 +167,113 @@ shutdown_handler() {
 trap shutdown_handler SIGTERM SIGINT SIGHUP
 
 # ---------------------------------------------------------------------------
-# Pick oldest pending job
+# Check GPU availability
 # ---------------------------------------------------------------------------
-pick_next_job() {
-    local job_file
-    job_file=$(find "$JOBS_DIR/pending" -name "*.json" -type f 2>/dev/null \
-        | sort \
-        | head -n 1)
-    echo "$job_file"
+check_gpu_available() {
+    nvidia-smi &>/dev/null && echo "true" || echo "false"
 }
 
 # ---------------------------------------------------------------------------
-# Dispatch a single job
+# Pick oldest eligible pending job and atomically claim it (flock)
+# Returns path in running/ or empty string if none available
 # ---------------------------------------------------------------------------
-dispatch_job() {
-    local job_file="$1"
-    local job_id
-    job_id=$(jq -r '.id // "unknown"' "$job_file")
-    local job_basename
-    job_basename=$(basename "$job_file")
+pick_and_claim_job() {
+    local gpu_ok="${1:-true}"
+    (
+        flock -x -w 5 200 || { echo ""; return; }
+        local job_file
+        while IFS= read -r job_file; do
+            [[ -z "$job_file" ]] && continue
+            # Skip GPU-required jobs when GPU is unavailable
+            if [[ "$gpu_ok" == "false" ]]; then
+                local gpu_req
+                gpu_req=$(jq -r '.gpu_required // false' "$job_file" 2>/dev/null || echo "false")
+                if [[ "$gpu_req" == "true" ]]; then
+                    continue
+                fi
+            fi
+            local bn
+            bn=$(basename "$job_file")
+            if mv "$job_file" "$JOBS_DIR/running/$bn" 2>/dev/null; then
+                echo "$JOBS_DIR/running/$bn"
+                return
+            fi
+        done < <(find "$JOBS_DIR/pending" -name "*.json" -type f 2>/dev/null | sort)
+    ) 200>"$JOBS_DIR/.pick.lock"
+}
 
-    log_event "INFO" "JOB_START" "id=$job_id file=$job_basename daily_count=$((DAILY_JOB_COUNT+1))/$MAX_JOBS_PER_DAY"
+# ---------------------------------------------------------------------------
+# Dispatch a job asynchronously with retry logic
+# job_file must already be in running/ (moved by pick_and_claim_job)
+# ---------------------------------------------------------------------------
+dispatch_job_async() {
+    local job_file="$1"  # Already in running/
+    local job_id job_basename max_retries
+    job_id=$(jq -r '.id // "unknown"' "$job_file")
+    job_basename=$(basename "$job_file")
+    max_retries=$(jq -r '.max_retries // 2' "$job_file")
+
+    log_event "INFO" "JOB_DISPATCHED" "id=$job_id daily_count=$((DAILY_JOB_COUNT+1))/$MAX_JOBS_PER_DAY parallel=$((${#RUNNING_PIDS[@]}+1))/$MAX_PARALLEL_JOBS"
     "$SCRIPTS_DIR/notify.sh" "job_start" "$job_id" "repo=$(jq -r '.repo // ""' "$job_file")" &
 
-    # Move to running/
-    mv "$job_file" "$JOBS_DIR/running/$job_basename"
-    local running_file="$JOBS_DIR/running/$job_basename"
+    # job_file is already in running/ (moved atomically by pick_and_claim_job)
 
-    # Check max_retries from job spec
-    local max_retries
-    max_retries=$(jq -r '.max_retries // 2' "$running_file")
-    local attempt=0
-    local exit_code=1
-
-    while [[ $attempt -le $max_retries ]]; do
-        if [[ $attempt -gt 0 ]]; then
-            log_event "WARN" "JOB_RETRY" "id=$job_id attempt=$((attempt+1))/$((max_retries+1))"
-        fi
-
-        "$SCRIPTS_DIR/run-job.sh" "$running_file" &
-        CURRENT_JOB_PID=$!
-
-        exit_code=0
-        wait "$CURRENT_JOB_PID" || exit_code=$?
-        CURRENT_JOB_PID=""
-
-        if [[ $exit_code -eq 0 ]]; then
-            break
-        fi
-
-        attempt=$((attempt + 1))
-        if [[ $attempt -gt $max_retries ]]; then
-            break
-        fi
-
-        log_event "INFO" "JOB_RETRY_WAIT" "id=$job_id waiting 30s before retry"
-        sleep 30
-    done
-
-    # Update daily counter
+    # Increment daily counter
     DAILY_JOB_COUNT=$((DAILY_JOB_COUNT + 1))
     save_quota_counter
 
-    if [[ $exit_code -eq 0 ]]; then
-        mv "$running_file" "$JOBS_DIR/done/$job_basename" 2>/dev/null || true
-        log_event "INFO" "JOB_DONE" "id=$job_id attempts=$((attempt+1)) daily_total=$DAILY_JOB_COUNT"
-        "$SCRIPTS_DIR/notify.sh" "job_done" "$job_id" "attempts=$((attempt+1))" &
-        CONSECUTIVE_FAILURES=0
-    else
-        mv "$running_file" "$JOBS_DIR/failed/$job_basename" 2>/dev/null || true
-        log_event "ERROR" "JOB_FAILED" "id=$job_id exit_code=$exit_code attempts=$((attempt)) daily_total=$DAILY_JOB_COUNT"
-        "$SCRIPTS_DIR/notify.sh" "job_failed" "$job_id" "exit_code=$exit_code attempts=$((attempt))" &
-        CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
-    fi
+    # Retry wrapper - run asynchronously
+    (
+        local attempt=0
+        while [[ $attempt -le $max_retries ]]; do
+            if [[ $attempt -gt 0 ]]; then
+                log_event "WARN" "JOB_RETRY" "id=$job_id attempt=$((attempt+1))/$((max_retries+1))"
+                sleep 30
+            fi
+            if "$SCRIPTS_DIR/run-job.sh" "$job_file"; then exit 0; fi
+            attempt=$((attempt + 1))
+        done
+        exit 1
+    ) &
 
-    return $exit_code
+    local pid=$!
+    RUNNING_PIDS[$pid]="$job_id"
+    RUNNING_FILES[$pid]="$job_basename"
+    log_event "INFO" "JOB_STARTED" "id=$job_id pid=$pid max_retries=$max_retries parallel=${#RUNNING_PIDS[@]}/$MAX_PARALLEL_JOBS"
+}
+
+# ---------------------------------------------------------------------------
+# Reap completed jobs (non-blocking check)
+# ---------------------------------------------------------------------------
+reap_completed_jobs() {
+    local pids_to_remove=()
+    for pid in "${!RUNNING_PIDS[@]}"; do
+        # Still running → skip
+        kill -0 "$pid" 2>/dev/null && continue
+
+        local exit_code=0
+        wait "$pid" 2>/dev/null || exit_code=$?
+        local job_id="${RUNNING_PIDS[$pid]}"
+        local job_basename="${RUNNING_FILES[$pid]}"
+
+        if [[ $exit_code -eq 0 ]]; then
+            mv "$JOBS_DIR/running/$job_basename" "$JOBS_DIR/done/$job_basename" 2>/dev/null || true
+            CONSECUTIVE_FAILURES=0
+            log_event "INFO" "JOB_DONE" "id=$job_id"
+            "$SCRIPTS_DIR/notify.sh" "job_done" "$job_id" "" &
+        else
+            mv "$JOBS_DIR/running/$job_basename" "$JOBS_DIR/failed/$job_basename" 2>/dev/null || true
+            CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+            log_event "ERROR" "JOB_FAILED" "id=$job_id exit_code=$exit_code"
+            "$SCRIPTS_DIR/notify.sh" "job_failed" "$job_id" "exit_code=$exit_code" &
+        fi
+        pids_to_remove+=("$pid")
+    done
+    for pid in "${pids_to_remove[@]:-}"; do
+        [[ -n "$pid" ]] || continue
+        unset "RUNNING_PIDS[$pid]"
+        unset "RUNNING_FILES[$pid]"
+    done
 }
 
 # ---------------------------------------------------------------------------
@@ -242,6 +290,7 @@ check_circuit_breaker() {
             sleep 10
             elapsed=$((elapsed + 10))
             update_heartbeat
+            reap_completed_jobs
         done
         CONSECUTIVE_FAILURES=0
         log_event "INFO" "CIRCUIT_BREAKER" "Resumed after pause"
@@ -286,7 +335,7 @@ log_system_info() {
 }
 
 main() {
-    log_event "INFO" "STARTUP" "Agent loop started. POLL=${POLL_INTERVAL}s MAX_JOBS/DAY=${MAX_JOBS_PER_DAY} COOLDOWN=${JOB_COOLDOWN}s AUTH=max-plan MODEL=${DEFAULT_MODEL:-claude-sonnet-4-5-20250929}"
+    log_event "INFO" "STARTUP" "Agent loop started. POLL=${POLL_INTERVAL}s MAX_JOBS/DAY=${MAX_JOBS_PER_DAY} MAX_PARALLEL=${MAX_PARALLEL_JOBS} AUTH=max-plan MODEL=${DEFAULT_MODEL:-claude-sonnet-4-6}"
 
     # Verify Claude Code authentication before starting
     local auth_retries=0
@@ -302,7 +351,7 @@ main() {
 
     # Configure git HTTPS auth with GITHUB_TOKEN
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-        git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+        git config --global --replace-all url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
         git config --global --add url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "git@github.com:"
         echo "$GITHUB_TOKEN" | gh auth login --with-token 2>/dev/null || true
         log_event "INFO" "GIT_AUTH" "GitHub HTTPS auth configured"
@@ -320,6 +369,9 @@ main() {
     local heartbeat_counter=0
 
     while [[ "$RUNNING" == "true" ]]; do
+        # Reap any completed jobs first
+        reap_completed_jobs
+
         # Update heartbeat every ~60s, system info every ~5min
         heartbeat_counter=$((heartbeat_counter + 1))
         if [[ $((heartbeat_counter % 2)) -eq 0 ]]; then
@@ -353,35 +405,48 @@ main() {
                 "$SCRIPTS_DIR/notify.sh" "quota_exceeded" "system" \
                     "Daily limit $MAX_JOBS_PER_DAY reached ($DAILY_JOB_COUNT jobs). Waiting for midnight reset." &
 
-                # Sleep in chunks so we can still respond to signals and update heartbeat
                 local slept=0
                 while [[ $slept -lt $wait_secs ]] && [[ "$RUNNING" == "true" ]]; do
                     sleep 60 &
                     wait $! 2>/dev/null || true
                     slept=$((slept + 60))
                     update_heartbeat
+                    reap_completed_jobs
                 done
             fi
             continue
         fi
 
-        # Look for pending jobs
-        local next_job
-        next_job=$(pick_next_job)
+        # Dispatch jobs up to parallel slot limit
+        local gpu_ok
+        gpu_ok=$(check_gpu_available)
+        local slots=$(( MAX_PARALLEL_JOBS - ${#RUNNING_PIDS[@]} ))
+        while [[ $slots -gt 0 ]]; do
+            local next_job
+            next_job=$(pick_and_claim_job "$gpu_ok")
+            [[ -z "$next_job" ]] && break
+            dispatch_job_async "$next_job"
+            slots=$(( slots - 1 ))
+            check_daily_quota || break
+        done
 
-        if [[ -n "$next_job" ]]; then
-            dispatch_job "$next_job" || true
-
-            # Cooldown between jobs (saves Max plan quota)
-            if [[ $JOB_COOLDOWN -gt 0 ]] && [[ "$RUNNING" == "true" ]]; then
-                log_event "INFO" "COOLDOWN" "Waiting ${JOB_COOLDOWN}s before next job (quota preservation)"
-                sleep "$JOB_COOLDOWN" &
-                wait $! 2>/dev/null || true
+        # Auto-queue check: if pending jobs below threshold, create new ones
+        local pending_count
+        pending_count=$(find "$JOBS_DIR/pending" -name "*.json" 2>/dev/null | wc -l | tr -d ' ')
+        if [[ -f "${HARNESS_DIR}/config/auto-queue-config.json" ]]; then
+            local threshold
+            threshold=$(jq -r '.trigger_threshold // 2' "${HARNESS_DIR}/config/auto-queue-config.json" 2>/dev/null || echo 2)
+            if [[ "$pending_count" -lt "$threshold" ]]; then
+                local created
+                created=$("$SCRIPTS_DIR/auto-queue.sh" 2>/dev/null || echo 0)
+                if [[ "$created" -gt 0 ]]; then
+                    log_event "INFO" "AUTO_QUEUE" "created=$created pending_was=$pending_count threshold=$threshold"
+                    "$SCRIPTS_DIR/notify.sh" "auto_queue" "$created" "pending_was=$pending_count" &
+                fi
             fi
-        else
-            sleep "$POLL_INTERVAL" &
-            wait $! 2>/dev/null || true
         fi
+
+        sleep "$POLL_INTERVAL" & wait $! 2>/dev/null || true
     done
 }
 

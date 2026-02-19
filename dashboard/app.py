@@ -11,6 +11,8 @@ import time
 import uuid
 import hashlib
 import secrets
+import urllib.request
+import urllib.error
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
@@ -46,6 +48,10 @@ HEARTBEAT_FILE = LOGS_DIR / "heartbeat.json"
 QUOTA_FILE = LOGS_DIR / "quota-counter.json"
 NOTIFICATIONS_LOG = LOGS_DIR / "notifications.log"
 
+CONFIG_DIR = HARNESS / "config"
+AUTOQUEUE_CONFIG = CONFIG_DIR / "auto-queue-config.json"
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
+
 # Auth token from env; if not set, auth is disabled (dev mode)
 DASHBOARD_TOKEN = os.environ.get("DASHBOARD_TOKEN", "")
 TOKEN_COOKIE = "dash_token"
@@ -55,6 +61,22 @@ _PR_URL_RE = re.compile(r'https://github\.com/[^\s"\']+/pull/\d+')
 
 # Notification line pattern compiled once
 _NOTIF_RE = re.compile(r'\[(.+?)\]\s+\[NOTIFY\]\s+(\S+)\s+(\S+)\s*(.*)')
+
+# Cost extraction pattern (matches "cost=1.2345" in cleanup event detail)
+_COST_RE = re.compile(r'cost=([0-9.]+)')
+
+# ---------------------------------------------------------------------------
+# Performance caches
+# ---------------------------------------------------------------------------
+# Duration cache: keyed by job_id; persists forever for done/failed jobs
+_duration_cache: dict[str, int | None] = {}
+
+# Costs cache: TTL-based to avoid full-scan on every request
+_costs_cache: dict = {"data": None, "ts": 0.0}
+_COSTS_TTL = 60.0  # seconds
+
+# Log endpoint: refuse to load more than this many bytes into memory at once
+MAX_LOG_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
 # ===== Security Middleware ==================================================
@@ -203,6 +225,18 @@ def _get_job_duration(job_id: str) -> dict:
     }
 
 
+def _get_cached_duration(job_id: str, status: str) -> int | None:
+    """Return job duration, using an in-memory cache for completed jobs."""
+    if status == "pending":
+        return None
+    if status in ("done", "failed") and job_id in _duration_cache:
+        return _duration_cache[job_id]
+    dur = _get_job_duration(job_id)["duration_sec"]
+    if status in ("done", "failed"):
+        _duration_cache[job_id] = dur  # cache permanently for finished jobs
+    return dur
+
+
 # ===== Job Data Access ======================================================
 
 def _list_jobs(status: str | None = None) -> list[dict]:
@@ -291,16 +325,26 @@ def api_jobs():
     else:
         jobs = _list_jobs(status_filter)
 
+    # Pagination
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 50, type=int), 200)
+    total = len(jobs)
+    start = (page - 1) * per_page
+    jobs_page = jobs[start:start + per_page]
+
     # Enrich with duration data to avoid N+1 frontend calls
     if request.args.get("enrich") != "false":
-        for job in jobs:
+        for job in jobs_page:
             if job.get("status") != "pending":
-                dur = _get_job_duration(job["id"])
-                job["duration_sec"] = dur["duration_sec"]
+                job["duration_sec"] = _get_cached_duration(job["id"], job.get("status", ""))
             else:
                 job["duration_sec"] = None
 
-    return jsonify(jobs)
+    resp = jsonify(jobs_page)
+    resp.headers["X-Total-Count"] = total
+    resp.headers["X-Page"] = page
+    resp.headers["X-Per-Page"] = per_page
+    return resp
 
 
 @app.route("/api/jobs/<job_id>")
@@ -422,10 +466,21 @@ def api_log(job_id: str):
     if not lp.exists():
         abort(404, description="Log not found")
     tail = request.args.get("tail", type=int)
-    text = lp.read_text(encoding="utf-8", errors="replace")
     if tail:
-        lines = text.splitlines()
-        text = "\n".join(lines[-tail:])
+        from collections import deque
+        with open(lp, "r", encoding="utf-8", errors="replace") as f:
+            lines = deque(f, maxlen=tail)
+        text = "".join(lines)
+    else:
+        size = lp.stat().st_size
+        if size > MAX_LOG_BYTES:
+            with open(lp, "r", encoding="utf-8", errors="replace") as f:
+                f.seek(size - MAX_LOG_BYTES)
+                f.readline()  # skip the partial first line
+                text = f.read()
+            text = f"[... 先頭部分省略（{size // 1024}KB中最後の5MBを表示）...]\n" + text
+        else:
+            text = lp.read_text(encoding="utf-8", errors="replace")
     return Response(text, mimetype="text/plain")
 
 
@@ -557,6 +612,184 @@ def sse_status_stream():
             payload = json.dumps(_build_status_payload())
             yield f"data: {payload}\n\n"
             time.sleep(5)
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ===== API: Auto-queue Config ===============================================
+
+_AQ_DEFAULT = {"enabled": False, "trigger_threshold": 2, "tasks": []}
+
+
+@app.route("/api/autoqueue")
+@require_auth
+def api_autoqueue_get():
+    """Return current auto-queue configuration."""
+    if not AUTOQUEUE_CONFIG.exists():
+        return jsonify(_AQ_DEFAULT)
+    data = _read_json(AUTOQUEUE_CONFIG)
+    if data is None:
+        return jsonify(_AQ_DEFAULT)
+    return jsonify(data)
+
+
+@app.route("/api/autoqueue", methods=["PUT"])
+@require_auth
+def api_autoqueue_put():
+    """Update auto-queue configuration."""
+    body = request.get_json(force=True)
+
+    if not isinstance(body.get("enabled"), bool):
+        abort(400, description="'enabled' must be a boolean")
+    if not isinstance(body.get("trigger_threshold"), int):
+        abort(400, description="'trigger_threshold' must be an integer")
+
+    tasks = body.get("tasks", [])
+    for t in tasks:
+        if not isinstance(t.get("id"), str) or not t["id"]:
+            abort(400, description="task 'id' must be a non-empty string")
+        if not isinstance(t.get("repo"), str) or not t["repo"]:
+            abort(400, description="task 'repo' must be a non-empty string")
+        if not isinstance(t.get("task"), str) or not t["task"]:
+            abort(400, description="task 'task' must be a non-empty string")
+        if not isinstance(t.get("enabled"), bool):
+            abort(400, description="task 'enabled' must be a boolean")
+        if not isinstance(t.get("queued"), bool):
+            abort(400, description="task 'queued' must be a boolean")
+
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = AUTOQUEUE_CONFIG.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(body, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.rename(AUTOQUEUE_CONFIG)
+    return jsonify(body)
+
+
+# ===== API: GitHub PRs ======================================================
+
+_REPO_RE = re.compile(r'^[a-zA-Z0-9_.\-]+/[a-zA-Z0-9_.\-]+$')
+
+
+@app.route("/api/prs")
+@require_auth
+def api_prs():
+    """Return open PRs for specified GitHub repositories."""
+    repos_param = request.args.get("repos", "").strip()
+    if not repos_param:
+        return jsonify([])
+
+    if not GITHUB_TOKEN:
+        return jsonify({"error": "GITHUB_TOKEN not configured"}), 503
+
+    repos = [r.strip() for r in repos_param.split(",") if r.strip()][:5]
+    results = []
+
+    for repo in repos:
+        if not _REPO_RE.match(repo):
+            continue
+        url = f"https://api.github.com/repos/{repo}/pulls?state=open&per_page=20"
+        req = urllib.request.Request(url)
+        req.add_header("Authorization", f"token {GITHUB_TOKEN}")
+        req.add_header("Accept", "application/vnd.github.v3+json")
+        req.add_header("User-Agent", "agent-dashboard/1.0")
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                prs = json.loads(resp.read().decode())
+                for pr in prs:
+                    results.append({
+                        "repo": repo,
+                        "number": pr["number"],
+                        "title": pr["title"],
+                        "head_ref": pr["head"]["ref"],
+                        "html_url": pr["html_url"],
+                        "created_at": pr["created_at"],
+                        "user": pr["user"]["login"],
+                        "draft": pr.get("draft", False),
+                    })
+        except Exception:
+            pass  # Skip repos that fail (rate limit, not found, etc.)
+
+    return jsonify(results)
+
+
+# ===== API: Job State =======================================================
+
+@app.route("/api/jobs/<job_id>/state")
+@require_auth
+def api_job_state(job_id: str):
+    """Return the latest state from a job's JSONL events file."""
+    job_id = _sanitize_job_id(job_id)
+    jp = _jsonl_path(job_id)
+    if not jp.exists():
+        return jsonify({"state": None, "iteration": 0, "elapsed_sec": None})
+
+    events = _read_jsonl(jp)
+    if not events:
+        return jsonify({"state": None, "iteration": 0, "elapsed_sec": None})
+
+    last = events[-1]
+    return jsonify({
+        "state": last.get("state"),
+        "iteration": last.get("iteration", 0),
+        "elapsed_sec": last.get("elapsed_sec"),
+        "last_event": last.get("event"),
+        "timestamp": last.get("timestamp"),
+    })
+
+
+# ===== API: Costs ===========================================================
+
+@app.route("/api/costs")
+@require_auth
+def api_costs():
+    """Return API cost totals aggregated from cleanup events in job JSONL logs."""
+    now = time.time()
+    if _costs_cache["data"] is not None and (now - _costs_cache["ts"]) < _COSTS_TTL:
+        return jsonify(_costs_cache["data"])
+
+    total = 0.0
+    by_job = []
+    if LOGS_DIR.is_dir():
+        for jp in sorted(LOGS_DIR.glob("*.jsonl"), reverse=True):
+            for ev in _read_jsonl(jp):
+                if ev.get("event") == "cleanup":
+                    m = _COST_RE.search(ev.get("detail", ""))
+                    if m:
+                        cost = float(m.group(1))
+                        total += cost
+                        by_job.append({
+                            "job_id": ev.get("job_id", jp.stem),
+                            "cost_usd": round(cost, 4),
+                            "timestamp": ev.get("timestamp"),
+                        })
+    result = {"total_usd": round(total, 4), "jobs": by_job[:50]}
+    _costs_cache["data"] = result
+    _costs_cache["ts"] = now
+    return jsonify(result)
+
+
+# ===== SSE: Kanban Stream ===================================================
+
+@app.route("/api/events/kanban-stream")
+@require_auth
+def sse_kanban_stream():
+    """SSE stream that pushes Kanban board updates when job states change."""
+    def generate():
+        prev_hash = None
+        while True:
+            jobs = _list_jobs()
+            curr_hash = hash(str([(j['id'], j['status']) for j in jobs]))
+            if curr_hash != prev_hash:
+                for j in jobs:
+                    j["duration_sec"] = _get_cached_duration(j["id"], j.get("status", ""))
+                yield f"data: {json.dumps(jobs)}\n\n"
+                prev_hash = curr_hash
+            else:
+                yield ": keepalive\n\n"
+            time.sleep(3)
 
     return Response(
         stream_with_context(generate()),
