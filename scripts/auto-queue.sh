@@ -27,6 +27,9 @@ TASK_ID=$(echo "$TASK_JSON" | jq -r '.id // "auto"')
 TASK_REPO=$(echo "$TASK_JSON" | jq -r '.repo // ""')
 TASK_TEXT=$(echo "$TASK_JSON" | jq -r '.task // ""')
 TASK_BUDGET=$(echo "$TASK_JSON" | jq -r '.time_budget_sec // 3600')
+TASK_PRIORITY=$(echo "$TASK_JSON" | jq -r '.priority // 3')
+# Clamp priority to 1-5
+if ! echo "$TASK_PRIORITY" | grep -qE '^[1-5]$'; then TASK_PRIORITY=3; fi
 
 if [[ -z "$TASK_REPO" || -z "$TASK_TEXT" ]]; then
     echo "0"
@@ -46,6 +49,7 @@ jq -n \
     --arg repo "$TASK_REPO" \
     --arg task "$TASK_TEXT" \
     --argjson budget "$TASK_BUDGET" \
+    --argjson priority "$TASK_PRIORITY" \
     --arg created_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     '{
         id: $id,
@@ -57,6 +61,7 @@ jq -n \
         time_budget_sec: $budget,
         max_retries: 2,
         gpu_required: false,
+        priority: $priority,
         created_at: $created_at,
         auto_queued: true
     }' > "$JOB_FILE"

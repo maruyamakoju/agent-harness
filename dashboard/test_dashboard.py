@@ -1076,6 +1076,50 @@ class TestDurationCache:
 
 
 # ---------------------------------------------------------------------------
+# Login Rate Limiting
+# ---------------------------------------------------------------------------
+class TestRateLimit:
+    def test_repeated_failures_return_429(self, auth_client):
+        import app as app_module
+        app_module._login_attempts.clear()
+        for _ in range(app_module._RATE_LIMIT_MAX):
+            auth_client.post("/login", data={"token": "wrong"})
+        # The next attempt should be rate-limited
+        r = auth_client.post("/login", data={"token": "wrong"})
+        assert r.status_code == 429
+
+    def test_success_clears_attempts(self, auth_client):
+        import app as app_module
+        app_module._login_attempts.clear()
+        # A couple of failures first
+        for _ in range(2):
+            auth_client.post("/login", data={"token": "wrong"})
+        # Correct token: should succeed and clear the counter
+        r = auth_client.post("/login", data={"token": "test-secret-123"})
+        assert r.status_code == 302
+        ip = "127.0.0.1"
+        assert len(app_module._login_attempts.get(ip, [])) == 0
+
+    def test_rate_limit_window_expires(self, auth_client):
+        import app as app_module
+        app_module._login_attempts.clear()
+        ip = "127.0.0.1"
+        # Inject attempts that are older than the window
+        old_ts = time.time() - (app_module._RATE_LIMIT_WINDOW + 10)
+        app_module._login_attempts[ip] = [old_ts] * app_module._RATE_LIMIT_MAX
+        # Should NOT be rate-limited because all attempts are expired
+        r = auth_client.post("/login", data={"token": "wrong"})
+        assert r.status_code != 429
+
+    def test_no_rate_limit_without_auth_enabled(self, client):
+        """When DASHBOARD_TOKEN is not set, login redirects immediately (no POST check)."""
+        for _ in range(10):
+            r = client.post("/login", data={"token": "anything"})
+            # Without auth, /login always redirects
+            assert r.status_code == 302
+
+
+# ---------------------------------------------------------------------------
 # Legacy compatibility - keep the original runner for backward compat
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":

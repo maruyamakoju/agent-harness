@@ -294,6 +294,63 @@ if [[ -f "$JOB_FILE" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 12. Test auto-queue.sh
+# ---------------------------------------------------------------------------
+step "Testing auto-queue.sh (no config → outputs 0)"
+AUTO_QUEUE_OUT=$(HARNESS_DIR="$HARNESS_DIR" bash "$HARNESS_DIR/scripts/auto-queue.sh" 2>/dev/null)
+if [[ "$AUTO_QUEUE_OUT" == "0" ]]; then
+    pass "auto-queue.sh outputs '0' when no config file"
+else
+    fail "auto-queue.sh expected '0', got '$AUTO_QUEUE_OUT'"
+fi
+
+step "Testing auto-queue.sh (with config, creates job)"
+mkdir -p "$HARNESS_DIR/config"
+cat > "$HARNESS_DIR/config/auto-queue-config.json" <<'EOF'
+{
+  "enabled": true,
+  "trigger_threshold": 2,
+  "tasks": [
+    {
+      "id": "smoke-auto-task",
+      "repo": "https://github.com/example/repo.git",
+      "task": "Auto-queued smoke test task",
+      "time_budget_sec": 1800,
+      "priority": 2,
+      "enabled": true,
+      "queued": false
+    }
+  ]
+}
+EOF
+
+AUTO_QUEUE_OUT=$(HARNESS_DIR="$HARNESS_DIR" bash "$HARNESS_DIR/scripts/auto-queue.sh" 2>/dev/null)
+if [[ "$AUTO_QUEUE_OUT" == "1" ]]; then
+    pass "auto-queue.sh outputs '1' (job created)"
+    AUTO_JOB=$(find "$HARNESS_DIR/jobs/pending" -name "*.json" | \
+        xargs grep -l '"auto_queued": true' 2>/dev/null | head -1)
+    if [[ -n "$AUTO_JOB" ]]; then
+        pass "auto-queued job found in pending/"
+        if jq -e '.priority == 2' "$AUTO_JOB" > /dev/null 2>&1; then
+            pass "auto-queued job has correct priority=2"
+        else
+            fail "auto-queued job missing or wrong priority"
+        fi
+        # Re-run: should output '0' because task is now marked queued=true
+        AUTO_QUEUE_OUT2=$(HARNESS_DIR="$HARNESS_DIR" bash "$HARNESS_DIR/scripts/auto-queue.sh" 2>/dev/null)
+        if [[ "$AUTO_QUEUE_OUT2" == "0" ]]; then
+            pass "auto-queue.sh idempotent: outputs '0' when all tasks already queued"
+        else
+            fail "auto-queue.sh not idempotent: expected '0' on second run, got '$AUTO_QUEUE_OUT2'"
+        fi
+    else
+        fail "No auto-queued job found in pending/"
+    fi
+else
+    fail "auto-queue.sh expected '1', got '$AUTO_QUEUE_OUT'"
+fi
+
+# ---------------------------------------------------------------------------
 # 13. Docker container test (if --docker mode)
 # ---------------------------------------------------------------------------
 if [[ "$MODE" == "--docker" ]]; then

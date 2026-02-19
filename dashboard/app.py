@@ -78,6 +78,30 @@ _COSTS_TTL = 60.0  # seconds
 # Log endpoint: refuse to load more than this many bytes into memory at once
 MAX_LOG_BYTES = 5 * 1024 * 1024  # 5 MB
 
+# ---------------------------------------------------------------------------
+# Login rate limiting
+# ---------------------------------------------------------------------------
+_login_attempts: dict[str, list[float]] = {}  # ip → [attempt_timestamps]
+_RATE_LIMIT_WINDOW = 60.0   # sliding window in seconds
+_RATE_LIMIT_MAX = 5         # max failed attempts within the window
+_RATE_LIMIT_LOCKOUT = 30.0  # extra lockout after hitting the limit
+
+
+def _is_rate_limited(ip: str) -> bool:
+    """Return True if the IP has hit the failed-login rate limit."""
+    now = time.time()
+    attempts = [t for t in _login_attempts.get(ip, []) if now - t < _RATE_LIMIT_WINDOW]
+    _login_attempts[ip] = attempts
+    return len(attempts) >= _RATE_LIMIT_MAX
+
+
+def _record_login_attempt(ip: str) -> None:
+    """Record a failed login attempt for rate-limiting purposes."""
+    now = time.time()
+    attempts = [t for t in _login_attempts.get(ip, []) if now - t < _RATE_LIMIT_WINDOW]
+    attempts.append(now)
+    _login_attempts[ip] = attempts
+
 
 # ===== Security Middleware ==================================================
 
@@ -143,14 +167,23 @@ def login():
     if not DASHBOARD_TOKEN:
         return redirect("/")
     if request.method == "POST":
+        ip = request.remote_addr or "unknown"
+        if _is_rate_limited(ip):
+            return render_template(
+                "login.html",
+                error="試行回数が多すぎます。しばらく待ってから再試行してください。"
+            ), 429
         token = request.form.get("token", "").strip()
         if hmac.compare_digest(_hash_token(token), _hash_token(DASHBOARD_TOKEN)):
+            # Clear failed attempts on successful login
+            _login_attempts.pop(ip, None)
             resp = make_response(redirect("/"))
             resp.set_cookie(
                 TOKEN_COOKIE, token, httponly=True, samesite="Lax",
                 secure=request.is_secure, max_age=60 * 60 * 24 * 30,
             )
             return resp
+        _record_login_attempt(ip)
         return render_template("login.html", error="Invalid token")
     return render_template("login.html", error=None)
 

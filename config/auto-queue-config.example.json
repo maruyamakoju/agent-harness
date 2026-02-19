@@ -1,0 +1,24 @@
+{
+  "enabled": false,
+  "trigger_threshold": 2,
+  "tasks": [
+    {
+      "id": "update-readme",
+      "repo": "https://github.com/your-org/your-repo.git",
+      "task": "README.md を最新の機能に合わせて更新し、セットアップ手順・使い方・設定項目を整理する",
+      "time_budget_sec": 1800,
+      "priority": 4,
+      "enabled": true,
+      "queued": false
+    },
+    {
+      "id": "add-unit-tests",
+      "repo": "https://github.com/your-org/your-repo.git",
+      "task": "カバレッジが低いモジュールにユニットテストを追加し、カバレッジを80%以上にする",
+      "time_budget_sec": 3600,
+      "priority": 3,
+      "enabled": false,
+      "queued": false
+    }
+  ]
+}

@@ -2,7 +2,9 @@
 .env
 
 # Auto-queue config (may contain sensitive task details)
-config/
+config/auto-queue-config.json
+# Track example files but ignore real configs
+!config/*.example.json
 
 # Job data (runtime state)
 jobs/pending/*.json

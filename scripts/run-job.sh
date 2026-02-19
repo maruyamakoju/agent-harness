@@ -364,10 +364,27 @@ invoke_claude() {
     # Build tool list
     local allowed_tools=(
         "Write" "Read" "Edit"
-        "Bash(git *)" "Bash(npm *)" "Bash(npx *)" "Bash(node *)"
+        # JavaScript / Node
+        "Bash(git *)" "Bash(npm *)" "Bash(npm run *)" "Bash(npx *)" "Bash(node *)"
+        "Bash(yarn *)" "Bash(pnpm *)"
+        # Python
         "Bash(python *)" "Bash(python3 *)" "Bash(pytest *)"
-        "Bash(pip *)" "Bash(pip3 *)"
+        "Bash(pip *)" "Bash(pip3 *)" "Bash(uv *)"
+        # Rust
+        "Bash(cargo *)" "Bash(rustc *)"
+        # Go
+        "Bash(go *)"
+        # Ruby
+        "Bash(ruby *)" "Bash(bundle *)" "Bash(rake *)"
+        # Java / Kotlin / Scala
+        "Bash(mvn *)" "Bash(gradle *)" "Bash(java *)" "Bash(javac *)"
+        # .NET / C#
+        "Bash(dotnet *)"
+        # Build systems
+        "Bash(make *)" "Bash(cmake *)"
+        # GitHub CLI
         "Bash(gh pr *)" "Bash(gh issue *)"
+        # File / shell utilities
         "Bash(find *)" "Bash(cat *)" "Bash(ls *)" "Bash(grep *)"
         "Bash(mkdir *)" "Bash(cp *)" "Bash(mv *)"
         "Bash(cd *)" "Bash(pwd)" "Bash(echo *)"
@@ -375,6 +392,7 @@ invoke_claude() {
         "Bash(wc *)" "Bash(sort *)" "Bash(diff *)"
         "Bash(touch *)" "Bash(rm *.tmp)" "Bash(rm *.log)"
         "Bash(sed *)" "Bash(tee *)" "Bash(xargs *)"
+        "Bash(unzip *)" "Bash(tar *)" "Bash(curl *)" "Bash(wget *)"
     )
 
     # Build comma-separated tool list for --allowedTools

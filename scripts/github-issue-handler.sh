@@ -102,10 +102,20 @@ process_new_issues() {
                 base_ref=$(echo "$body" | grep -iE '^base:' | head -1 | sed 's/^base:\s*//i' | tr -d '`' | xargs)
             fi
 
+            # Extract priority: field (1-5, default 3)
+            local priority=3
+            if echo "$body" | grep -qiE '^priority:'; then
+                local raw_prio
+                raw_prio=$(echo "$body" | grep -iE '^priority:' | head -1 | sed 's/^priority:\s*//i' | tr -d '`' | xargs)
+                if echo "$raw_prio" | grep -qE '^[1-5]$'; then
+                    priority="$raw_prio"
+                fi
+            fi
+
             # Build task from title + remaining body text
             local task="$title"
             local extra_text
-            extra_text=$(echo "$body" | grep -ivE '^(repo|setup|test|time-budget|base):' | head -10 | tr '\n' ' ' | sed 's/  */ /g' | head -c 500)
+            extra_text=$(echo "$body" | grep -ivE '^(repo|setup|test|time-budget|base|priority):' | head -10 | tr '\n' ' ' | sed 's/  */ /g' | head -c 500)
             if [[ -n "$extra_text" && "$extra_text" != " " ]]; then
                 task="${title}. ${extra_text}"
             fi
@@ -116,6 +126,9 @@ process_new_issues() {
                 --task "$task"
                 --base "$base_ref"
                 --time-budget "$time_budget"
+                --priority "$priority"
+                --issue-number "$number"
+                --issue-repo "$repo"
             )
             [[ -n "$setup_cmd" ]] && job_args+=(--setup "$setup_cmd")
             [[ -n "$test_cmd" ]] && job_args+=(--test "$test_cmd")
