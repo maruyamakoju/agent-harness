@@ -23,18 +23,19 @@ BOLD='\033[1m'
 # JSON output mode
 # ---------------------------------------------------------------------------
 if [[ "$FORMAT" == "--json" ]]; then
-    result="[]"
-    for status in pending running done failed; do
-        if [[ "$FILTER" != "all" && "$FILTER" != "$status" ]]; then
-            continue
-        fi
-        for f in "$JOBS_DIR/$status"/*.json; do
-            [[ -f "$f" ]] || continue
-            entry=$(jq --arg s "$status" '. + {status: $s}' "$f")
-            result=$(echo "$result" | jq --argjson e "$entry" '. + [$e]')
+    # Stream each file's JSON with status injected, then collect with jq -s.
+    # This is O(N) instead of the previous O(N²) approach.
+    {
+        for status in pending running done failed; do
+            if [[ "$FILTER" != "all" && "$FILTER" != "$status" ]]; then
+                continue
+            fi
+            for f in "$JOBS_DIR/$status"/*.json; do
+                [[ -f "$f" ]] || continue
+                jq --arg s "$status" '. + {status: $s}' "$f"
+            done
         done
-    done
-    echo "$result" | jq .
+    } | jq -s .
     exit 0
 fi
 

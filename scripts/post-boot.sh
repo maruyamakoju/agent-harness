@@ -118,8 +118,9 @@ if [[ -z "${GITHUB_TOKEN:-}" || "$GITHUB_TOKEN" == *"XXXX"* ]]; then
     echo "  sudo -u $AGENT_USER nano $HARNESS_DIR/.env"
     echo ""
 else
-    # Configure gh CLI with the token
-    sudo -u "$AGENT_USER" bash -c "echo '$GITHUB_TOKEN' | gh auth login --with-token" 2>/dev/null || true
+    # Configure gh CLI with the token.
+    # Pass token via stdin (not command-line args) to avoid exposure in ps aux.
+    echo "$GITHUB_TOKEN" | sudo -u "$AGENT_USER" gh auth login --with-token 2>/dev/null || true
     ok "GitHub token configured"
 fi
 
@@ -152,6 +153,7 @@ info "Setting up cron jobs..."
 
 # Install watchdog (every 5 min) and cleanup (daily 3am) for agent user
 CRON_TMP=$(mktemp)
+trap 'rm -f "$CRON_TMP" "${CRON_TMP}.clean"' EXIT
 crontab -u "$AGENT_USER" -l 2>/dev/null > "$CRON_TMP" || true
 # Remove old entries if any
 grep -v "agent-harness" "$CRON_TMP" > "${CRON_TMP}.clean" || true

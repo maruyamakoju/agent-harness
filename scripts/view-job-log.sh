@@ -20,7 +20,9 @@ if [[ -z "$JOB_ID" ]]; then
     echo "Usage: view-job-log.sh <job-id> [--summary|--errors|--states|--follow|--full]"
     echo ""
     echo "Available job logs:"
-    ls -1t "$LOGS_DIR"/*.log 2>/dev/null | head -20 | while read -r f; do
+    # Use find+sort instead of ls to safely handle filenames with special chars.
+    find "$LOGS_DIR" -maxdepth 1 -name "*.log" -type f -printf '%T@ %p\n' 2>/dev/null \
+        | sort -rn | head -20 | awk '{print $2}' | while IFS= read -r f; do
         echo "  $(basename "$f" .log)"
     done
     exit 1
