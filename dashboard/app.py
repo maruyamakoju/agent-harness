@@ -568,7 +568,7 @@ def api_log(job_id: str):
                 f.seek(size - MAX_LOG_BYTES)
                 f.readline()  # skip the partial first line
                 text = f.read()
-            text = f"[... 先頭部分省略（{size // 1024}KB中最後の5MBを表示）...]\n" + text
+            text = f"[... 先頭部分省略（{size // (1024 * 1024)}MB のログのうち最後の5MBを表示）...]\n" + text
         else:
             text = lp.read_text(encoding="utf-8", errors="replace")
     return Response(text, mimetype="text/plain")
@@ -893,6 +893,7 @@ def sse_kanban_stream():
 @app.errorhandler(400)
 @app.errorhandler(401)
 @app.errorhandler(404)
+@app.errorhandler(429)
 def handle_error(e):
     return jsonify({"error": str(e)}), e.code
 

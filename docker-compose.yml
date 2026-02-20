@@ -34,7 +34,6 @@ services:
       - HOME=/home/agent
       # Quota management
       - MAX_JOBS_PER_DAY=${MAX_JOBS_PER_DAY:-20}
-      - JOB_COOLDOWN=${JOB_COOLDOWN:-60}
       - MAX_PARALLEL_JOBS=${MAX_PARALLEL_JOBS:-2}
       - DEFAULT_MODEL=${DEFAULT_MODEL:-claude-sonnet-4-6}
       # GitHub Issue → auto-job (space-separated repo list)
@@ -102,6 +101,7 @@ services:
       - DASHBOARD_TOKEN=${DASHBOARD_TOKEN:-}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - GH_TOKEN=${GITHUB_TOKEN:-}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-claude-sonnet-4-6}
     volumes:
       - ./jobs:/harness/jobs:ro
       - ./logs:/harness/logs:ro

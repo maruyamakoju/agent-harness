@@ -24,7 +24,6 @@ CIRCUIT_BREAKER_PAUSE=600  # 10 minutes
 
 # Quota management (Max plan)
 MAX_JOBS_PER_DAY="${MAX_JOBS_PER_DAY:-20}"
-JOB_COOLDOWN="${JOB_COOLDOWN:-60}"  # kept for backward compatibility
 DAILY_JOB_COUNT=0
 DAILY_RESET_DATE=""
 QUOTA_COUNTER_FILE="${LOGS_DIR}/quota-counter.json"

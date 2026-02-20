@@ -447,6 +447,13 @@ invoke_claude() {
         > "$output_file" 2>&1
     local exit_code=$?
 
+    # On timeout (exit 124), reset conversation so the next attempt starts fresh.
+    # Continuing a timed-out session can confuse Claude with incomplete context.
+    if [[ $exit_code -eq 124 ]]; then
+        log "WARN" "Claude timed out after ${invoke_timeout}s – resetting conversation ID"
+        CONVERSATION_ID=""
+    fi
+
     # Append raw output to job log
     cat "$output_file" >> "$JOB_LOG"
 
