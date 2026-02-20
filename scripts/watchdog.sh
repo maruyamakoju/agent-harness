@@ -6,7 +6,7 @@
 # =============================================================================
 set -euo pipefail
 
-HARNESS_DIR="${HARNESS_DIR:-/home/agent/agent-harness}"
+HARNESS_DIR="${HARNESS_DIR:-/harness}"
 HEARTBEAT_FILE="${HARNESS_DIR}/logs/heartbeat.json"
 SCRIPTS_DIR="${HARNESS_DIR}/scripts"
 MAX_STALE_SECONDS=600  # 10 minutes

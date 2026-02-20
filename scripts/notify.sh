@@ -72,10 +72,11 @@ fi
 # Discord webhook
 # ---------------------------------------------------------------------------
 if [[ -n "${DISCORD_WEBHOOK_URL:-}" ]]; then
+    payload=$(jq -n --arg content "$(echo -e "$FULL_TEXT")" '{"content": $content}')
     curl -s -X POST \
         "${DISCORD_WEBHOOK_URL}" \
         -H "Content-Type: application/json" \
-        -d "{\"content\": \"$(echo -e "$FULL_TEXT" | sed 's/"/\\"/g')\"}" \
+        -d "$payload" \
         > /dev/null 2>&1 || echo "WARN: Discord notification failed"
 fi
 
@@ -83,10 +84,11 @@ fi
 # Generic webhook (Slack-compatible)
 # ---------------------------------------------------------------------------
 if [[ -n "${WEBHOOK_URL:-}" ]]; then
+    payload=$(jq -n --arg text "$(echo -e "$FULL_TEXT")" '{"text": $text}')
     curl -s -X POST \
         "${WEBHOOK_URL}" \
         -H "Content-Type: application/json" \
-        -d "{\"text\": \"$(echo -e "$FULL_TEXT" | sed 's/"/\\"/g')\"}" \
+        -d "$payload" \
         > /dev/null 2>&1 || echo "WARN: Webhook notification failed"
 fi
 

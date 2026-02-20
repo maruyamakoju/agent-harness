@@ -16,8 +16,8 @@ echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Starting cleanup..."
 # 1. Remove completed job files older than 30 days
 # ---------------------------------------------------------------------------
 echo "Cleaning old completed jobs..."
-find "$JOBS_DIR/done" -name "*.json" -mtime +30 -delete 2>/dev/null || true
 DONE_CLEANED=$(find "$JOBS_DIR/done" -name "*.json" -mtime +30 2>/dev/null | wc -l)
+find "$JOBS_DIR/done" -name "*.json" -mtime +30 -delete 2>/dev/null || true
 echo "  Removed $DONE_CLEANED old completed job files"
 
 # ---------------------------------------------------------------------------
