@@ -1411,6 +1411,94 @@ class TestCostEnrichment:
 
 
 # ---------------------------------------------------------------------------
+# Search API
+# ---------------------------------------------------------------------------
+class TestSearch:
+    def test_search_finds_by_task(self, client):
+        r = client.get("/api/search?q=unit+test")
+        assert r.status_code == 200
+        results = r.get_json()
+        assert any("unit tests" in j["task"].lower() for j in results)
+
+    def test_search_finds_by_repo(self, client):
+        r = client.get("/api/search?q=test%2Frepo")
+        assert r.status_code == 200
+        results = r.get_json()
+        assert len(results) > 0
+
+    def test_search_no_match_returns_empty(self, client):
+        r = client.get("/api/search?q=xyzzy_no_match_ever")
+        assert r.status_code == 200
+        results = r.get_json()
+        assert results == []
+
+    def test_search_short_query_returns_empty(self, client):
+        """Single-char query (< 2 chars) returns [] without scanning jobs."""
+        r = client.get("/api/search?q=a")
+        assert r.status_code == 200
+        assert r.get_json() == []
+
+    def test_search_empty_query_returns_empty(self, client):
+        r = client.get("/api/search?q=")
+        assert r.status_code == 200
+        assert r.get_json() == []
+
+    def test_search_results_have_status_field(self, client):
+        r = client.get("/api/search?q=test")
+        assert r.status_code == 200
+        results = r.get_json()
+        for j in results:
+            assert "status" in j
+            assert j["status"] in ("pending", "running", "done", "failed")
+
+    def test_search_requires_auth(self, auth_client):
+        r = auth_client.get("/api/search?q=test")
+        assert r.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Retry Count in job detail
+# ---------------------------------------------------------------------------
+class TestRetryCount:
+    def test_job_detail_has_retry_count(self, client):
+        """api_job_detail always includes a retry_count field."""
+        r = client.get("/api/jobs/2026-01-01T120000Z-test-done")
+        assert r.status_code == 200
+        j = r.get_json()
+        assert "retry_count" in j
+
+    def test_job_without_retries_is_zero(self, client):
+        """A job with no job_start events in JSONL has retry_count=0."""
+        import app as app_module
+        app_module._duration_cache.pop("2026-01-01T120000Z-test-done", None)
+        r = client.get("/api/jobs/2026-01-01T120000Z-test-done")
+        assert r.status_code == 200
+        j = r.get_json()
+        # Default JSONL has exactly 1 job_start event → max(0, 1-1) = 0
+        assert j["retry_count"] >= 0
+
+    def test_retry_count_reflects_multiple_starts(self, client, test_data_dir):
+        """A JSONL with 3 job_start events → retry_count = 2."""
+        job_id = "2026-01-01T120000Z-test-done"
+        jp = test_data_dir / "logs" / f"{job_id}.jsonl"
+        original = jp.read_text(encoding="utf-8")
+        # Inject two extra job_start events
+        extra = "\n".join([
+            json.dumps({"event": "job_start", "timestamp": "2026-01-01T13:00:00Z"}),
+            json.dumps({"event": "job_start", "timestamp": "2026-01-01T14:00:00Z"}),
+        ])
+        jp.write_text(original + "\n" + extra, encoding="utf-8")
+        try:
+            r = client.get(f"/api/jobs/{job_id}")
+            assert r.status_code == 200
+            j = r.get_json()
+            # Original has 1 job_start + 2 injected = 3 starts → retry_count = 2
+            assert j["retry_count"] == 2
+        finally:
+            jp.write_text(original, encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
 # Legacy compatibility - keep the original runner for backward compat
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":

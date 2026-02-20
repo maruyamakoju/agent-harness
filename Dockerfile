@@ -67,8 +67,8 @@ RUN npm install -g @anthropic-ai/claude-code \
 # Security: remove sudo, remove unnecessary setuid binaries
 # -----------------------------------------------------------------------------
 RUN apt-get purge -y sudo 2>/dev/null || true \
-    && find / -perm /4000 -type f -exec chmod u-s {} \; 2>/dev/null || true \
-    && find / -perm /2000 -type f -exec chmod g-s {} \; 2>/dev/null || true
+    && find / -mount -perm /4000 -type f -exec chmod u-s {} \; 2>/dev/null || true \
+    && find / -mount -perm /2000 -type f -exec chmod g-s {} \; 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
 # Unprivileged agent user

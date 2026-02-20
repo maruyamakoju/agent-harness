@@ -90,6 +90,27 @@ if [[ -z "$REPO" ]] || [[ -z "$TASK" ]]; then
     usage
 fi
 
+# Validate numeric args (prevent jq errors and bad job files)
+if ! [[ "$TIME_BUDGET" =~ ^[0-9]+$ ]]; then
+    echo "Error: --time-budget must be a non-negative integer (got: '$TIME_BUDGET')"
+    usage
+fi
+if ! [[ "$MAX_RETRIES" =~ ^[0-9]+$ ]]; then
+    echo "Error: --max-retries must be a non-negative integer (got: '$MAX_RETRIES')"
+    usage
+fi
+if ! [[ "$PRIORITY" =~ ^[1-5]$ ]]; then
+    echo "Error: --priority must be 1-5 (got: '$PRIORITY')"
+    usage
+fi
+if [[ -n "$ISSUE_NUMBER" ]] && ! [[ "$ISSUE_NUMBER" =~ ^[0-9]+$ ]]; then
+    echo "Error: --issue-number must be a positive integer (got: '$ISSUE_NUMBER')"
+    usage
+fi
+
+# Ensure destination directory exists
+mkdir -p "$JOBS_DIR"
+
 # ---------------------------------------------------------------------------
 # Generate job ID and branch name
 # ---------------------------------------------------------------------------

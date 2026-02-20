@@ -817,6 +817,7 @@ const JobsTab = {
   _perPage: 50,
   _hasMore: false,
   _total: 0,
+  _searchMode: false,
 
   _buildUrl(page) {
     const base = '/api/jobs?page=' + page + '&per_page=' + this._perPage;
@@ -852,25 +853,36 @@ const JobsTab = {
     }
   },
 
-  applySearch() {
+  async applySearch() {
     const q = (Utils.$('job-search').value || '').toLowerCase().trim();
-    const filtered = q
-      ? State.allJobs.filter(j =>
-          (j.repo || '').toLowerCase().includes(q) ||
-          (j.task || '').toLowerCase().includes(q) ||
-          (j.id || '').toLowerCase().includes(q))
-      : State.allJobs;
-    this.render(filtered);
+    if (q.length >= 2) {
+      // Server-side search: returns matches across ALL jobs (not just loaded page)
+      try {
+        const results = await Api.getJSON('/api/search?q=' + encodeURIComponent(q));
+        this._searchMode = true;
+        this.render(results);
+      } catch (e) {
+        Toast.show('検索エラー: ' + e.message, 'error');
+      }
+    } else {
+      this._searchMode = false;
+      this.render(State.allJobs);
+    }
   },
 
   render(jobs) {
     const tbody = Utils.$('jobs-tbody');
     // Update load-more button visibility
     const loadMoreBtn = Utils.$('jobs-load-more');
-    if (loadMoreBtn) loadMoreBtn.style.display = this._hasMore ? '' : 'none';
+    // Hide load-more button during search mode
+    if (loadMoreBtn) loadMoreBtn.style.display = (this._hasMore && !this._searchMode) ? '' : 'none';
     const countInfo = Utils.$('jobs-count-info');
-    if (countInfo && this._total > 0) {
-      countInfo.textContent = State.allJobs.length + ' / ' + this._total + ' 件表示中';
+    if (countInfo) {
+      if (this._searchMode) {
+        countInfo.textContent = jobs.length + ' 件一致';
+      } else if (this._total > 0) {
+        countInfo.textContent = State.allJobs.length + ' / ' + this._total + ' 件表示中';
+      }
     }
     if (!jobs.length) {
       tbody.innerHTML = '<tr><td colspan="8" class="empty-text">ジョブが見つかりません。</td></tr>';
@@ -934,12 +946,15 @@ const JobsTab = {
 
       const prLink = j.pr_url ? `<div style="margin-top:8px"><strong>PR:</strong> <a href="${Utils.escHtml(j.pr_url)}" target="_blank" rel="noopener">${Utils.escHtml(j.pr_url)}</a></div>` : '';
       const durInfo = dur && dur.duration_sec != null ? `<div style="margin-top:8px"><strong>所要時間:</strong> ${Utils.fmtDuration(dur.duration_sec)} (${dur.start} - ${dur.end})</div>` : '';
+      const retryInfo = (j.retry_count > 0)
+        ? `<div style="margin-top:8px"><strong>リトライ:</strong> ${j.retry_count}回 / 最大${j.max_retries ?? '-'}回</div>`
+        : '';
       const canRerun = j.status === 'done' || j.status === 'failed';
       const canMerge = j.status === 'done' && j.pr_url;
 
       cell.innerHTML = `<div class="job-detail">
         <pre>${Utils.escHtml(JSON.stringify({repo:j.repo, base_ref:j.base_ref, work_branch:j.work_branch, task:j.task, commands:j.commands, time_budget_sec:j.time_budget_sec, gpu_required:j.gpu_required, created_at:j.created_at}, null, 2))}</pre>
-        ${prLink}${durInfo}${eventsHtml}
+        ${prLink}${durInfo}${retryInfo}${eventsHtml}
         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-sm" onclick="LogUI.viewJobLog('${id}')">ログを表示</button>
           ${canRerun ? `<button class="btn btn-sm" onclick="JobsTab.rerun('${id}')" style="color:var(--accent);border-color:var(--accent);">再実行</button>` : ''}

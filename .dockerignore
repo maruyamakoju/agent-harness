@@ -6,6 +6,9 @@
 .env
 *.pem
 *.key
+# Claude Code auth session must NOT be baked into the image.
+# The session is mounted at runtime via the claude-config Docker volume.
+.claude/settings.local.json
 
 # Runtime data
 jobs/pending/*.json

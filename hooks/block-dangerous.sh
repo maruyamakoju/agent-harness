@@ -76,6 +76,8 @@ echo "$COMMAND" | grep -qiE 'wget\s.*\|\s*(ba)?sh' && block_command "REMOTE_CODE
 echo "$COMMAND" | grep -qiE 'curl\s.*\|\s*python' && block_command "REMOTE_CODE_EXEC" "curl pipe to python"
 echo "$COMMAND" | grep -qiE 'wget\s.*\|\s*python' && block_command "REMOTE_CODE_EXEC" "wget pipe to python"
 echo "$COMMAND_LOWER" | grep -qE '(curl|wget).*-o\s*/tmp/.*&&.*(ba)?sh\s*/tmp/' && block_command "REMOTE_CODE_EXEC" "download and execute"
+# Bypass: download → chmod +x → execute directly (without explicit sh/bash)
+echo "$COMMAND_LOWER" | grep -qE '(curl|wget).*-o\s*/tmp/.*&&\s*chmod.*\+x.*&&\s*/tmp/' && block_command "REMOTE_CODE_EXEC" "download chmod exec"
 
 # === Reverse Shell / Network Listeners ===
 echo "$COMMAND" | grep -qiE 'nc\s+(-[a-zA-Z]*)*(l|e)\s' && block_command "REVERSE_SHELL" "netcat listener/exec"
@@ -89,6 +91,8 @@ echo "$COMMAND" | grep -qiE 'ruby.*TCPSocket' && block_command "REVERSE_SHELL" "
 echo "$COMMAND" | grep -qiE 'perl.*socket' && block_command "REVERSE_SHELL" "perl socket"
 
 # === Credential / Secret Access ===
+# /proc/self/environ and /proc/<pid>/environ expose all env vars including secrets
+echo "$COMMAND" | grep -qiE '/proc/(self|[0-9]+)/environ' && block_command "CREDENTIAL_ACCESS" "/proc environ"
 echo "$COMMAND" | grep -qiE 'cat\s.*/etc/(shadow|passwd|sudoers)' && block_command "CREDENTIAL_ACCESS" "system auth files"
 echo "$COMMAND" | grep -qiE 'cat\s.*\.ssh/(id_|.*key|authorized_keys|config)' && block_command "CREDENTIAL_ACCESS" "SSH keys"
 echo "$COMMAND" | grep -qiE 'cat\s.*\.aws/(credentials|config)' && block_command "CREDENTIAL_ACCESS" "AWS credentials"

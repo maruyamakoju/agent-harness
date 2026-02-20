@@ -438,7 +438,50 @@ def api_job_detail(job_id: str):
     if not data:
         abort(404, description="Job not found")
     data["pr_url"] = _extract_pr_url(_log_path(job_id))
+    # Retry count: use field from job JSON if already written by run-job.sh,
+    # otherwise count job_start events (each retry emits one).
+    if "retry_count" not in data:
+        evs = _read_jsonl(_jsonl_path(job_id))
+        starts = sum(1 for e in evs if e.get("event") == "job_start")
+        data["retry_count"] = max(0, starts - 1)
     return jsonify(data)
+
+
+# ===== API: Search ==========================================================
+
+@app.route("/api/search")
+@require_auth
+def api_search():
+    """Full-text search across all jobs by task description, repo URL, or job ID.
+
+    Query parameter:
+        q   - search string (minimum 2 characters)
+
+    Returns up to 50 matches sorted by status priority then id descending.
+    """
+    q = request.args.get("q", "").strip().lower()
+    if len(q) < 2:
+        return jsonify([])
+
+    _STATUS_ORDER = {"running": 0, "pending": 1, "done": 2, "failed": 3}
+    results: list[dict] = []
+
+    for s in ("running", "pending", "done", "failed"):
+        d = STATUS_DIRS[s]
+        if not d.is_dir():
+            continue
+        for f in sorted(d.glob("*.json"), reverse=True):
+            data = _read_json(f)
+            if not data:
+                continue
+            if (q in data.get("task", "").lower()
+                    or q in data.get("repo", "").lower()
+                    or q in data.get("id", "").lower()):
+                data["status"] = s
+                results.append(data)
+
+    results.sort(key=lambda j: (_STATUS_ORDER.get(j.get("status", ""), 4), j.get("id", "")))
+    return jsonify(results[:50])
 
 
 @app.route("/api/jobs", methods=["POST"])
