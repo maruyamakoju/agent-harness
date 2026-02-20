@@ -234,12 +234,13 @@ while true; do
     fi
 
     # Process each update
-    echo "$UPDATES" | jq -c '.result[]' 2>/dev/null | while IFS= read -r update; do
+    # Use process substitution (not pipe) so OFFSET is updated in the current shell
+    while IFS= read -r update; do
         update_id=$(echo "$update" | jq -r '.update_id')
         chat_id=$(echo "$update" | jq -r '.message.chat.id // empty')
         text=$(echo "$update" | jq -r '.message.text // empty')
 
-        # Update offset
+        # Update offset (must happen in current shell, not a subshell)
         OFFSET=$((update_id + 1))
         echo "$OFFSET" > "$OFFSET_FILE"
 
@@ -264,5 +265,5 @@ while true; do
             /start*)    handle_help "$chat_id" ;;
             *)          send_message "$chat_id" "Unknown command. Try /help" ;;
         esac
-    done
+    done < <(echo "$UPDATES" | jq -c '.result[]' 2>/dev/null)
 done

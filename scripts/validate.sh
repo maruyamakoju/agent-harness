@@ -41,7 +41,9 @@ REQUIRED_FILES=(
     "scripts/agent-loop.sh"
     "scripts/run-job.sh"
     "scripts/create-job.sh"
+    "scripts/cancel-job.sh"
     "scripts/auto-queue.sh"
+    "scripts/github-issue-handler.sh"
     "scripts/monitor.sh"
     "scripts/notify.sh"
     "scripts/cleanup.sh"
@@ -68,7 +70,9 @@ SCRIPTS=(
     "scripts/agent-loop.sh"
     "scripts/run-job.sh"
     "scripts/create-job.sh"
+    "scripts/cancel-job.sh"
     "scripts/auto-queue.sh"
+    "scripts/github-issue-handler.sh"
     "scripts/monitor.sh"
     "scripts/notify.sh"
     "scripts/cleanup.sh"
@@ -211,7 +215,7 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "--- Directory Structure ---"
 
-for dir in jobs/pending jobs/running jobs/done jobs/failed logs; do
+for dir in jobs/pending jobs/running jobs/done jobs/failed logs config; do
     if [[ -d "$PROJECT_DIR/$dir" ]]; then
         check_pass "$dir/ exists"
     else

@@ -11,7 +11,7 @@
 set -euo pipefail
 
 RULES_FILE="/etc/iptables/agent-egress.rules"
-AGENT_HARNESS="${AGENT_HARNESS_DIR:-/home/agent/agent-harness}"
+AGENT_HARNESS="${HARNESS_DIR:-/harness}"
 
 case "${1:-help}" in
     save)

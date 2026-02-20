@@ -9,8 +9,8 @@ set -euo pipefail
 TEMP_THRESHOLD=80       # Celsius
 TEMP_CRITICAL=90        # Celsius - emergency shutdown
 CHECK_INTERVAL=60       # Seconds
-LOGS_DIR="${HARNESS_DIR:-/home/agent/agent-harness}/logs"
-SCRIPTS_DIR="${HARNESS_DIR:-/home/agent/agent-harness}/scripts"
+LOGS_DIR="${HARNESS_DIR:-/harness}/logs"
+SCRIPTS_DIR="${HARNESS_DIR:-/harness}/scripts"
 
 check_gpu() {
     if ! command -v nvidia-smi &>/dev/null; then

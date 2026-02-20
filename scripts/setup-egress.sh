@@ -6,7 +6,7 @@
 # =============================================================================
 set -euo pipefail
 
-NETWORK_NAME="${1:-0216muzin_agent-net}"
+NETWORK_NAME="${1:-$(docker network ls --filter "name=agent-net" --format "{{.Name}}" 2>/dev/null | head -1)}"
 
 echo "Configuring egress rules for network: $NETWORK_NAME"
 
