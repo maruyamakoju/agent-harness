@@ -57,7 +57,7 @@ process_new_issues() {
             --limit 10 \
             2>/dev/null || echo "[]")
 
-        echo "$issues" | jq -c '.[]' 2>/dev/null | while IFS= read -r issue; do
+        while IFS= read -r issue; do
             local number title body
             number=$(echo "$issue" | jq -r '.number')
             title=$(echo "$issue" | jq -r '.title')
@@ -175,7 +175,7 @@ COMMENT
             )" 2>/dev/null || true
 
             log "Job created for $issue_key -> $job_id"
-        done
+        done < <(echo "$issues" | jq -c '.[]' 2>/dev/null)
     done
 }
 

@@ -513,6 +513,14 @@ state_clone() {
             cp "${HARNESS_DIR}/CLAUDE.md" "$WORKSPACE/CLAUDE.md" 2>/dev/null || true
         fi
 
+        # Protect agent-internal files from being accidentally committed
+        {
+            echo ""
+            echo "# Agent-internal files (auto-added by agent harness)"
+            echo "claude-progress.txt"
+            echo "requirements.json"
+        } >> "$WORKSPACE/.gitignore" 2>/dev/null || true
+
         LAST_COMMIT_HASH=$(git rev-parse HEAD)
         log_json "clone_success" "branch=$WORK_BRANCH commit=$LAST_COMMIT_HASH"
         log_state_transition "CLONE" "SETUP"

@@ -1179,6 +1179,104 @@ class TestCancel:
 
 
 # ---------------------------------------------------------------------------
+# Notification Test API
+# ---------------------------------------------------------------------------
+class TestNotifyTest:
+    def test_notify_all_not_configured(self, client):
+        """Without notification env vars, all channels return not_configured."""
+        r = client.post("/api/notify/test")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["telegram"] == "not_configured"
+        assert data["discord"] == "not_configured"
+        assert data["webhook"] == "not_configured"
+
+    def test_notify_returns_json(self, client):
+        r = client.post("/api/notify/test")
+        assert r.status_code == 200
+        assert r.content_type == "application/json"
+
+    def test_notify_get_not_allowed(self, client):
+        r = client.get("/api/notify/test")
+        assert r.status_code == 405
+
+
+# ---------------------------------------------------------------------------
+# Cost Enrichment in api_jobs
+# ---------------------------------------------------------------------------
+class TestCostEnrichment:
+    def test_jobs_have_cost_usd_field(self, client):
+        """All jobs returned by api_jobs have a cost_usd field."""
+        r = client.get("/api/jobs")
+        assert r.status_code == 200
+        jobs = r.get_json()
+        for job in jobs:
+            assert "cost_usd" in job
+
+    def test_pending_job_cost_is_none(self, client, test_data_dir):
+        pending = {
+            "id": "2026-01-05T000000Z-cost-pending",
+            "repo": "https://github.com/test/x.git",
+            "task": "cost pending test",
+            "commands": {"setup": [], "test": []},
+            "time_budget_sec": 3600,
+            "max_retries": 2,
+            "gpu_required": False,
+            "created_at": "2026-01-05T00:00:00Z",
+        }
+        p = test_data_dir / "jobs" / "pending" / "2026-01-05T000000Z-cost-pending.json"
+        p.write_text(json.dumps(pending), encoding="utf-8")
+        try:
+            r = client.get("/api/jobs?status=pending")
+            jobs = r.get_json()
+            job = next((j for j in jobs if j["id"] == pending["id"]), None)
+            assert job is not None
+            assert job["cost_usd"] is None
+        finally:
+            p.unlink(missing_ok=True)
+
+    def test_done_job_cost_cached(self, client, test_data_dir):
+        """Cost for done jobs is cached in _cost_per_job_cache after first fetch."""
+        import app as app_module
+        jp = test_data_dir / "logs" / "2026-01-01T120000Z-test-done.jsonl"
+        original = jp.read_text(encoding="utf-8")
+        jp.write_text(original + '\n' + json.dumps({
+            "timestamp": "2026-01-01T12:20:02Z",
+            "job_id": "2026-01-01T120000Z-test-done",
+            "event": "cleanup",
+            "state": "DONE",
+            "iteration": 1,
+            "elapsed_sec": 1201,
+            "detail": "duration=1201s iterations=1 cost=0.0777",
+        }), encoding="utf-8")
+        app_module._cost_per_job_cache.clear()
+        try:
+            client.get("/api/jobs?status=done")
+            assert "2026-01-01T120000Z-test-done" in app_module._cost_per_job_cache
+            cached = app_module._cost_per_job_cache["2026-01-01T120000Z-test-done"]
+            assert cached == pytest.approx(0.0777)
+        finally:
+            jp.write_text(original, encoding="utf-8")
+            app_module._cost_per_job_cache.clear()
+
+    def test_done_job_cost_uses_cache_on_second_call(self, client, test_data_dir):
+        """Sentinel in _cost_per_job_cache is returned without re-reading JSONL."""
+        import app as app_module
+        app_module._cost_per_job_cache.clear()
+        # First call to populate cache
+        client.get("/api/jobs?status=done")
+        # Overwrite with sentinel
+        app_module._cost_per_job_cache["2026-01-01T120000Z-test-done"] = 9.99
+        # Second call must serve from cache
+        r = client.get("/api/jobs?status=done")
+        jobs = r.get_json()
+        done = next((j for j in jobs if j["id"] == "2026-01-01T120000Z-test-done"), None)
+        assert done is not None
+        assert done["cost_usd"] == pytest.approx(9.99)
+        app_module._cost_per_job_cache.clear()
+
+
+# ---------------------------------------------------------------------------
 # Legacy compatibility - keep the original runner for backward compat
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":

@@ -52,6 +52,12 @@ CONFIG_DIR = HARNESS / "config"
 AUTOQUEUE_CONFIG = CONFIG_DIR / "auto-queue-config.json"
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
 
+# Notification channel credentials (optional - only used for /api/notify/test)
+_TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+_TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+_DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+_WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
+
 # Auth token from env; if not set, auth is disabled (dev mode)
 DASHBOARD_TOKEN = os.environ.get("DASHBOARD_TOKEN", "")
 TOKEN_COOKIE = "dash_token"
@@ -70,6 +76,9 @@ _COST_RE = re.compile(r'cost=([0-9.]+)')
 # ---------------------------------------------------------------------------
 # Duration cache: keyed by job_id; persists forever for done/failed jobs
 _duration_cache: dict[str, int | None] = {}
+
+# Per-job cost cache: keyed by job_id; persists forever for done/failed jobs
+_cost_per_job_cache: dict[str, float | None] = {}
 
 # Costs cache: TTL-based to avoid full-scan on every request
 _costs_cache: dict = {"data": None, "ts": 0.0}
@@ -280,6 +289,28 @@ def _get_cached_duration(job_id: str, status: str) -> int | None:
     return dur
 
 
+def _get_job_cost(job_id: str) -> float | None:
+    """Extract cost_usd from per-job JSONL events."""
+    events = _read_jsonl(_jsonl_path(job_id))
+    for ev in reversed(events):
+        m = _COST_RE.search(ev.get("detail", ""))
+        if m:
+            return round(float(m.group(1)), 4)
+    return None
+
+
+def _get_cached_cost(job_id: str, status: str) -> float | None:
+    """Return job cost, using an in-memory cache for completed jobs."""
+    if status == "pending":
+        return None
+    if status in ("done", "failed") and job_id in _cost_per_job_cache:
+        return _cost_per_job_cache[job_id]
+    cost = _get_job_cost(job_id)
+    if status in ("done", "failed"):
+        _cost_per_job_cache[job_id] = cost  # cache permanently for finished jobs
+    return cost
+
+
 # ===== Job Data Access ======================================================
 
 def _list_jobs(status: str | None = None) -> list[dict]:
@@ -375,13 +406,16 @@ def api_jobs():
     start = (page - 1) * per_page
     jobs_page = jobs[start:start + per_page]
 
-    # Enrich with duration data to avoid N+1 frontend calls
+    # Enrich with duration and cost data to avoid N+1 frontend calls
     if request.args.get("enrich") != "false":
         for job in jobs_page:
-            if job.get("status") != "pending":
-                job["duration_sec"] = _get_cached_duration(job["id"], job.get("status", ""))
+            status = job.get("status", "")
+            if status != "pending":
+                job["duration_sec"] = _get_cached_duration(job["id"], status)
+                job["cost_usd"] = _get_cached_cost(job["id"], status)
             else:
                 job["duration_sec"] = None
+                job["cost_usd"] = None
 
     resp = jsonify(jobs_page)
     resp.headers["X-Total-Count"] = total
@@ -886,6 +920,69 @@ def sse_kanban_stream():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ===== Notification test ====================================================
+
+@app.route("/api/notify/test", methods=["POST"])
+@require_auth
+def api_notify_test():
+    """Send a test notification to all configured channels."""
+    msg = "🧪 [Agent Dashboard] 通知テスト - システムは正常です"
+    results: dict[str, str] = {}
+
+    # Telegram
+    if _TELEGRAM_BOT_TOKEN and _TELEGRAM_CHAT_ID:
+        try:
+            url = f"https://api.telegram.org/bot{_TELEGRAM_BOT_TOKEN}/sendMessage"
+            payload = json.dumps({"chat_id": _TELEGRAM_CHAT_ID, "text": msg}).encode()
+            req = urllib.request.Request(
+                url, data=payload, headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=5):
+                results["telegram"] = "ok"
+        except urllib.error.HTTPError as e:
+            results["telegram"] = f"http_{e.code}"
+        except Exception as e:
+            results["telegram"] = f"error: {str(e)[:100]}"
+    else:
+        results["telegram"] = "not_configured"
+
+    # Discord
+    if _DISCORD_WEBHOOK_URL:
+        try:
+            payload = json.dumps({"content": msg}).encode()
+            req = urllib.request.Request(
+                _DISCORD_WEBHOOK_URL, data=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=5):
+                results["discord"] = "ok"
+        except urllib.error.HTTPError as e:
+            results["discord"] = f"http_{e.code}"
+        except Exception as e:
+            results["discord"] = f"error: {str(e)[:100]}"
+    else:
+        results["discord"] = "not_configured"
+
+    # Generic webhook
+    if _WEBHOOK_URL:
+        try:
+            payload = json.dumps({"text": msg}).encode()
+            req = urllib.request.Request(
+                _WEBHOOK_URL, data=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=5):
+                results["webhook"] = "ok"
+        except urllib.error.HTTPError as e:
+            results["webhook"] = f"http_{e.code}"
+        except Exception as e:
+            results["webhook"] = f"error: {str(e)[:100]}"
+    else:
+        results["webhook"] = "not_configured"
+
+    return jsonify(results)
 
 
 # ===== Error handlers =======================================================

@@ -245,8 +245,8 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
     <input type="text" id="job-search" placeholder="リポジトリ・タスクで検索..." style="width:auto;min-width:220px;padding:4px 12px;font-size:13px;border-radius:20px;">
   </div>
   <table>
-    <thead><tr><th>ジョブID</th><th>リポジトリ</th><th>タスク</th><th>優先</th><th>状態</th><th>所要時間</th><th>操作</th></tr></thead>
-    <tbody id="jobs-tbody"><tr><td colspan="6" class="loading-text">読み込み中...</td></tr></tbody>
+    <thead><tr><th>ジョブID</th><th>リポジトリ</th><th>タスク</th><th>優先</th><th>状態</th><th>所要時間</th><th>コスト</th><th>操作</th></tr></thead>
+    <tbody id="jobs-tbody"><tr><td colspan="8" class="loading-text">読み込み中...</td></tr></tbody>
   </table>
   <div style="text-align:center;margin-top:16px;" id="jobs-load-more-wrap" style="display:none;">
     <button class="btn" id="jobs-load-more" style="display:none;" onclick="JobsTab.loadMore()">もっと読み込む</button>
@@ -350,6 +350,10 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
       <p><code>WEBHOOK_URL</code> - 汎用 / Slack互換Webhook</p>
     </div>
     <p style="margin-top:12px;">通知イベント: job_start, job_done, job_failed, circuit_breaker, stale_heartbeat, auth_failed, quota_exceeded</p>
+    <div style="margin-top:12px;">
+      <button class="btn btn-sm" id="notify-test-btn" onclick="SettingsTab.testNotify()">疎通テスト</button>
+      <div id="notify-test-result" style="margin-top:8px;font-size:12px;"></div>
+    </div>
   </div>
 
   <div class="settings-section">
@@ -864,7 +868,7 @@ const JobsTab = {
       countInfo.textContent = State.allJobs.length + ' / ' + this._total + ' 件表示中';
     }
     if (!jobs.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty-text">ジョブが見つかりません。</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-text">ジョブが見つかりません。</td></tr>';
       return;
     }
     const PRIO_LABEL = {1:'緊急',2:'高',3:'',4:'低',5:'最低'};
@@ -889,13 +893,14 @@ const JobsTab = {
         <td style="text-align:center;">${prioCell}</td>
         <td><span class="badge ${j.status}">${sl}</span></td>
         <td style="font-size:12px;white-space:nowrap;">${durText}</td>
+        <td style="font-size:12px;white-space:nowrap;">${j.cost_usd != null ? '$' + j.cost_usd.toFixed(3) : ''}</td>
         <td style="white-space:nowrap;">
           <button class="btn btn-sm" onclick="JobsTab.toggleDetail('${j.id}')">詳細</button>
           ${canRerun ? `<button class="btn btn-sm" onclick="JobsTab.rerun('${j.id}')" style="color:var(--accent);border-color:var(--accent);">再実行</button>` : ''}
           ${j.status === 'pending' ? `<button class="btn btn-sm danger" onclick="JobsTab.cancel('${j.id}')">取消</button>` : ''}
           ${j.status === 'running' ? `<button class="btn btn-sm danger" onclick="JobsTab.cancelRunning('${j.id}')">中断</button>` : ''}
         </td>
-      </tr><tr class="detail-row" id="detail-${j.id}" style="display:none"><td colspan="7"></td></tr>`;
+      </tr><tr class="detail-row" id="detail-${j.id}" style="display:none"><td colspan="8"></td></tr>`;
     }).join('');
   },
 
@@ -1181,6 +1186,25 @@ const SettingsTab = {
       Utils.$('cost-total').textContent = '$' + data.total_usd.toFixed(4);
     } catch (e) {
       console.error('Cost stats load failed:', e);
+    }
+  },
+
+  async testNotify() {
+    const btn = Utils.$('notify-test-btn');
+    const result = Utils.$('notify-test-result');
+    btn.disabled = true;
+    result.textContent = '送信中...';
+    try {
+      const data = await (await Api.postJSON('/api/notify/test', {})).json();
+      const lines = Object.entries(data).map(([k, v]) => {
+        const color = v === 'ok' ? 'var(--green)' : v === 'not_configured' ? 'var(--text2)' : 'var(--red)';
+        return `<div style="color:${color}">${Utils.escHtml(k + ': ' + v)}</div>`;
+      });
+      result.innerHTML = lines.join('');
+    } catch (e) {
+      result.innerHTML = `<span style="color:var(--red)">${Utils.escHtml(e.message)}</span>`;
+    } finally {
+      btn.disabled = false;
     }
   },
 };
