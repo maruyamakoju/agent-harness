@@ -24,7 +24,9 @@ echo "  Removed $DONE_CLEANED old completed job files"
 # 2. Remove failed job files older than 14 days
 # ---------------------------------------------------------------------------
 echo "Cleaning old failed jobs..."
+FAILED_CLEANED=$(find "$JOBS_DIR/failed" -name "*.json" -mtime +14 2>/dev/null | wc -l)
 find "$JOBS_DIR/failed" -name "*.json" -mtime +14 -delete 2>/dev/null || true
+echo "  Removed $FAILED_CLEANED old failed job files"
 
 # ---------------------------------------------------------------------------
 # 3. Compress and rotate logs older than 7 days
@@ -76,15 +78,17 @@ fi
 # 5. Docker cleanup
 # ---------------------------------------------------------------------------
 echo "Docker cleanup..."
-docker system prune -f --volumes 2>/dev/null || true
-docker image prune -f 2>/dev/null || true
+# Prune stopped containers, unused networks, and dangling images.
+# Do NOT use --volumes: that would delete ALL unused volumes on the host,
+# including those belonging to other services.
+docker system prune -f 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # 6. Report disk usage
 # ---------------------------------------------------------------------------
 echo ""
 echo "Disk usage:"
-df -h / /harness /workspaces 2>/dev/null | head -5
+df -h / "$HARNESS_DIR" "$WORKSPACES_DIR" 2>/dev/null | head -5
 echo ""
 echo "Jobs directory:"
 du -sh "$JOBS_DIR"/* 2>/dev/null || true

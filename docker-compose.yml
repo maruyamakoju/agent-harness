@@ -106,6 +106,7 @@ services:
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
       - WEBHOOK_URL=${WEBHOOK_URL:-}
+      - MAX_PENDING_JOBS=${MAX_PENDING_JOBS:-0}
     volumes:
       - ./jobs:/harness/jobs:ro
       - ./logs:/harness/logs:ro

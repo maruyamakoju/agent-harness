@@ -212,6 +212,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
     <div class="card" id="parallel-card" style="display:none"><div class="label">並列実行</div><div class="value" id="c-parallel">--</div><div class="sub" id="c-parallel-sub"></div></div>
     <div class="card" id="gpu-card" style="display:none"><div class="label">GPU</div><div class="value" id="c-gpu" style="font-size:16px;">--</div><div class="sub" id="c-gpu-sub"></div></div>
     <div class="card" id="cost-card"><div class="label">累計コスト</div><div class="value" id="c-cost" style="font-size:20px;">--</div><div class="sub" id="c-cost-sub"></div></div>
+    <div class="card"><div class="label">モデル</div><div class="value" id="c-model" style="font-size:13px;word-break:break-all;">--</div></div>
   </div>
   <div style="display:flex;gap:24px;align-items:flex-start;margin-bottom:24px;flex-wrap:wrap;">
     <div style="flex:0 0 auto;">
@@ -608,6 +609,10 @@ const StatusUI = {
       Utils.$('c-gpu').textContent = hb.gpu.name || '利用可能';
       Utils.$('c-gpu-sub').textContent = hb.gpu.memory || '';
     }
+
+    if (data.model) {
+      Utils.$('c-model').textContent = data.model;
+    }
   },
 };
 
@@ -930,13 +935,15 @@ const JobsTab = {
       const prLink = j.pr_url ? `<div style="margin-top:8px"><strong>PR:</strong> <a href="${Utils.escHtml(j.pr_url)}" target="_blank" rel="noopener">${Utils.escHtml(j.pr_url)}</a></div>` : '';
       const durInfo = dur && dur.duration_sec != null ? `<div style="margin-top:8px"><strong>所要時間:</strong> ${Utils.fmtDuration(dur.duration_sec)} (${dur.start} - ${dur.end})</div>` : '';
       const canRerun = j.status === 'done' || j.status === 'failed';
+      const canMerge = j.status === 'done' && j.pr_url;
 
       cell.innerHTML = `<div class="job-detail">
         <pre>${Utils.escHtml(JSON.stringify({repo:j.repo, base_ref:j.base_ref, work_branch:j.work_branch, task:j.task, commands:j.commands, time_budget_sec:j.time_budget_sec, gpu_required:j.gpu_required, created_at:j.created_at}, null, 2))}</pre>
         ${prLink}${durInfo}${eventsHtml}
-        <div style="margin-top:8px;display:flex;gap:8px;">
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-sm" onclick="LogUI.viewJobLog('${id}')">ログを表示</button>
           ${canRerun ? `<button class="btn btn-sm" onclick="JobsTab.rerun('${id}')" style="color:var(--accent);border-color:var(--accent);">再実行</button>` : ''}
+          ${canMerge ? `<button class="btn btn-sm" onclick="JobsTab.mergePR('${id}')" style="color:var(--green);border-color:var(--green);">PRをマージ</button>` : ''}
         </div>
       </div>`;
     } catch (e) {
@@ -969,6 +976,20 @@ const JobsTab = {
       const j = await r.json();
       Toast.show('再実行ジョブを投入しました: ' + j.id, 'success');
       this.load();
+    } catch (e) { Toast.show(e.message, 'error'); }
+  },
+
+  async mergePR(id) {
+    if (!confirm('ジョブ ' + id + ' のPRをマージしますか？\nこの操作は取り消せません。')) return;
+    try {
+      const r = await Api.postJSON('/api/jobs/' + id + '/merge', {});
+      const data = await r.json();
+      if (data.merged) {
+        Toast.show('PRをマージしました', 'success');
+        this.load();
+      } else {
+        Toast.show('マージ失敗: ' + (data.message || '不明なエラー'), 'error');
+      }
     } catch (e) { Toast.show(e.message, 'error'); }
   },
 };

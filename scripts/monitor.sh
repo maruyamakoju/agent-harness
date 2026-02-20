@@ -156,7 +156,7 @@ print_system() {
 
     # Disk usage
     local disk_usage
-    disk_usage=$(df -h /harness 2>/dev/null | tail -1 | awk '{print $5 " used of " $2}' || echo "N/A")
+    disk_usage=$(df -h "$HARNESS_DIR" 2>/dev/null | tail -1 | awk '{print $5 " used of " $2}' || echo "N/A")
     echo -e "  Disk:     ${disk_usage}"
 
     # Memory

@@ -1179,6 +1179,140 @@ class TestCancel:
 
 
 # ---------------------------------------------------------------------------
+# Status includes model name (F1)
+# ---------------------------------------------------------------------------
+class TestStatusModel:
+    def test_status_has_model_field(self, client):
+        r = client.get("/api/status")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert "model" in data
+        assert data["model"]  # non-empty string
+
+    def test_model_default_value(self, client):
+        import app as app_module
+        assert app_module.DEFAULT_MODEL == "claude-sonnet-4-6"
+
+
+# ---------------------------------------------------------------------------
+# Pending queue depth limit (F2)
+# ---------------------------------------------------------------------------
+class TestQueueDepthLimit:
+    def test_no_limit_when_zero(self, client):
+        """MAX_PENDING_JOBS=0 means unlimited — jobs always accepted."""
+        import app as app_module
+        original = app_module.MAX_PENDING_JOBS
+        app_module.MAX_PENDING_JOBS = 0
+        try:
+            r = client.post("/api/jobs", json={
+                "repo": "https://github.com/test/r.git",
+                "task": "unlimited test",
+            })
+            assert r.status_code == 201
+            client.delete(f"/api/jobs/{r.get_json()['id']}")
+        finally:
+            app_module.MAX_PENDING_JOBS = original
+
+    def test_queue_full_returns_429(self, client):
+        """When pending count >= MAX_PENDING_JOBS, new jobs are rejected with 429."""
+        import app as app_module
+        original = app_module.MAX_PENDING_JOBS
+        app_module.MAX_PENDING_JOBS = 1  # allow only 1 pending job
+        created_id = None
+        try:
+            # First job should succeed (0 pending < limit 1)
+            r1 = client.post("/api/jobs", json={
+                "repo": "https://github.com/test/r.git",
+                "task": "first - should be accepted",
+            })
+            assert r1.status_code == 201
+            created_id = r1.get_json()["id"]
+
+            # Second job should be rejected (1 pending >= limit 1)
+            r2 = client.post("/api/jobs", json={
+                "repo": "https://github.com/test/r.git",
+                "task": "second - should be rejected",
+            })
+            assert r2.status_code == 429
+            err = r2.get_json().get("error", "")
+            assert "full" in err.lower() or "queue" in err.lower() or "pending" in err.lower()
+        finally:
+            app_module.MAX_PENDING_JOBS = original
+            if created_id:
+                client.delete(f"/api/jobs/{created_id}")
+
+    def test_queue_not_full_allows_job(self, client, test_data_dir):
+        """When pending count < MAX_PENDING_JOBS, new jobs are accepted."""
+        import app as app_module
+        original = app_module.MAX_PENDING_JOBS
+        existing = len(list((test_data_dir / "jobs" / "pending").glob("*.json")))
+        app_module.MAX_PENDING_JOBS = existing + 5  # plenty of room
+        try:
+            r = client.post("/api/jobs", json={
+                "repo": "https://github.com/test/r.git",
+                "task": "should be accepted",
+            })
+            assert r.status_code == 201
+            client.delete(f"/api/jobs/{r.get_json()['id']}")
+        finally:
+            app_module.MAX_PENDING_JOBS = original
+
+
+# ---------------------------------------------------------------------------
+# PR Merge API (F3)
+# ---------------------------------------------------------------------------
+class TestMergePR:
+    def test_merge_no_github_token_returns_503(self, client):
+        import app as app_module
+        original = app_module.GITHUB_TOKEN
+        app_module.GITHUB_TOKEN = ""
+        try:
+            r = client.post("/api/jobs/2026-01-01T120000Z-test-done/merge")
+            assert r.status_code == 503
+        finally:
+            app_module.GITHUB_TOKEN = original
+
+    def test_merge_no_pr_url_returns_404(self, client):
+        import app as app_module
+        original = app_module.GITHUB_TOKEN
+        app_module.GITHUB_TOKEN = "fake-token"
+        try:
+            # The test done job's log has a PR URL embedded; use a job without one
+            r = client.post("/api/jobs/2026-01-02T080000Z-test-failed/merge")
+            # failed job has no PR URL in log
+            assert r.status_code == 404
+        finally:
+            app_module.GITHUB_TOKEN = original
+
+    def test_merge_nonexistent_job_returns_404(self, client):
+        import app as app_module
+        original = app_module.GITHUB_TOKEN
+        app_module.GITHUB_TOKEN = "fake-token"
+        try:
+            r = client.post("/api/jobs/nonexistent-job-id/merge")
+            assert r.status_code == 404
+        finally:
+            app_module.GITHUB_TOKEN = original
+
+    def test_merge_get_not_allowed(self, client):
+        r = client.get("/api/jobs/2026-01-01T120000Z-test-done/merge")
+        assert r.status_code == 405
+
+    def test_merge_invalid_method_returns_400(self, client):
+        import app as app_module
+        original = app_module.GITHUB_TOKEN
+        app_module.GITHUB_TOKEN = "fake-token"
+        try:
+            r = client.post(
+                "/api/jobs/2026-01-01T120000Z-test-done/merge",
+                json={"merge_method": "invalid"},
+            )
+            assert r.status_code == 400
+        finally:
+            app_module.GITHUB_TOKEN = original
+
+
+# ---------------------------------------------------------------------------
 # Notification Test API
 # ---------------------------------------------------------------------------
 class TestNotifyTest:

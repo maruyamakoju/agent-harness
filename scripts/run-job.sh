@@ -702,7 +702,7 @@ state_test() {
     while IFS= read -r cmd; do
         [[ -z "$cmd" ]] && continue
         log "INFO" "Running test: $cmd"
-        if eval "$cmd" 2>&1 | tee -a "$JOB_LOG" "$test_output_file"; then
+        if bash -c "$cmd" 2>&1 | tee -a "$JOB_LOG" "$test_output_file"; then
             log "INFO" "Test passed: $cmd"
         else
             log "WARN" "Test failed: $cmd"

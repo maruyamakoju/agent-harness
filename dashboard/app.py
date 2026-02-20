@@ -51,6 +51,8 @@ NOTIFICATIONS_LOG = LOGS_DIR / "notifications.log"
 CONFIG_DIR = HARNESS / "config"
 AUTOQUEUE_CONFIG = CONFIG_DIR / "auto-queue-config.json"
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
+DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "claude-sonnet-4-6")
+MAX_PENDING_JOBS = int(os.environ.get("MAX_PENDING_JOBS", "0"))  # 0 = unlimited
 
 # Notification channel credentials (optional - only used for /api/notify/test)
 _TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -70,6 +72,9 @@ _NOTIF_RE = re.compile(r'\[(.+?)\]\s+\[NOTIFY\]\s+(\S+)\s+(\S+)\s*(.*)')
 
 # Cost extraction pattern (matches "cost=1.2345" in cleanup event detail)
 _COST_RE = re.compile(r'cost=([0-9.]+)')
+
+# GitHub PR URL parser: https://github.com/{owner}/{repo}/pull/{number}
+_PR_GITHUB_RE = re.compile(r'github\.com/([^/]+)/([^/\s"\']+)/pull/(\d+)')
 
 # ---------------------------------------------------------------------------
 # Performance caches
@@ -351,6 +356,7 @@ def _build_status_payload() -> dict:
         "heartbeat": heartbeat,
         "quota": quota,
         "counts": counts,
+        "model": DEFAULT_MODEL,
         "server_time": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -443,6 +449,12 @@ def api_create_job():
     task = body.get("task", "").strip()
     if not repo or not task:
         abort(400, description="'repo' and 'task' are required")
+
+    # Pending queue depth limit (0 = unlimited)
+    if MAX_PENDING_JOBS > 0:
+        pending_count = len(list(PENDING.glob("*.json"))) if PENDING.is_dir() else 0
+        if pending_count >= MAX_PENDING_JOBS:
+            abort(429, description=f"Pending queue is full ({pending_count}/{MAX_PENDING_JOBS}). Wait for jobs to be processed.")
 
     setup_cmds = body.get("setup", [])
     test_cmds = body.get("test", [])
@@ -920,6 +932,55 @@ def sse_kanban_stream():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ===== PR Merge =============================================================
+
+@app.route("/api/jobs/<job_id>/merge", methods=["POST"])
+@require_auth
+def api_merge_pr(job_id: str):
+    """Merge the GitHub PR associated with this job via the GitHub API."""
+    job_id = _sanitize_job_id(job_id)
+    if not GITHUB_TOKEN:
+        abort(503, description="GITHUB_TOKEN not configured")
+
+    pr_url = _extract_pr_url(_log_path(job_id))
+    if not pr_url:
+        abort(404, description="No PR URL found for this job")
+
+    m = _PR_GITHUB_RE.search(pr_url)
+    if not m:
+        abort(400, description="Cannot parse PR URL")
+    owner, repo_name, pr_number = m.group(1), m.group(2), m.group(3)
+
+    body = request.get_json(force=True) or {}
+    merge_method = body.get("merge_method", "merge")
+    if merge_method not in ("merge", "squash", "rebase"):
+        abort(400, description="merge_method must be one of: merge, squash, rebase")
+
+    api_url = f"https://api.github.com/repos/{owner}/{repo_name}/pulls/{pr_number}/merge"
+    payload = json.dumps({"merge_method": merge_method}).encode()
+    req = urllib.request.Request(
+        api_url, data=payload, method="PUT",
+        headers={
+            "Authorization": f"Bearer {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            result = json.loads(r.read().decode())
+        return jsonify({"merged": True, "message": result.get("message", ""), "pr_url": pr_url})
+    except urllib.error.HTTPError as e:
+        try:
+            err_data = json.loads(e.read().decode())
+        except Exception:
+            err_data = {}
+        return jsonify({"merged": False, "message": err_data.get("message", str(e))}), e.code
+    except Exception as e:
+        abort(502, description=f"GitHub API error: {str(e)[:100]}")
 
 
 # ===== Notification test ====================================================
