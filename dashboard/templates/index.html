@@ -192,6 +192,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
   <div class="tab" data-tab="submit">ジョブ投入</div>
   <div class="tab" data-tab="logs">ログ</div>
   <div class="tab" data-tab="notifications">通知</div>
+  <div class="tab" data-tab="metrics">メトリクス</div>
   <div class="tab" data-tab="settings">設定</div>
   <div class="tab" data-tab="kanban">Kanban</div>
   <div class="tab" data-tab="prs">PR追跡</div>
@@ -394,6 +395,67 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
       <tbody id="cost-detail-tbody"><tr><td colspan="3" class="loading-text">読み込み中...</td></tr></tbody>
     </table>
     <div style="margin-top:8px;font-weight:600;">合計: <span id="cost-total">--</span></div>
+  </div>
+</div>
+
+<!-- Metrics -->
+<div class="panel" id="panel-metrics">
+  <div class="section-header">
+    <h3>メトリクス</h3>
+    <button class="btn btn-sm" id="metrics-refresh-btn">更新</button>
+  </div>
+
+  <!-- Health status banner -->
+  <div id="metrics-health-banner" style="display:none;padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:13px;font-weight:600;"></div>
+
+  <!-- Success rate cards -->
+  <h4 style="margin-bottom:10px;font-size:13px;color:var(--text2);letter-spacing:.5px;">成功率</h4>
+  <div class="cards" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px;">
+    <div class="card">
+      <div class="label">直近7日</div>
+      <div class="value" id="sr-7d" style="font-size:28px;">--</div>
+      <div class="sub" id="sr-7d-sub"></div>
+    </div>
+    <div class="card">
+      <div class="label">直近30日</div>
+      <div class="value" id="sr-30d" style="font-size:28px;">--</div>
+      <div class="sub" id="sr-30d-sub"></div>
+    </div>
+    <div class="card">
+      <div class="label">全期間</div>
+      <div class="value" id="sr-all" style="font-size:28px;">--</div>
+      <div class="sub" id="sr-all-sub"></div>
+    </div>
+  </div>
+
+  <!-- Avg duration -->
+  <h4 style="margin-bottom:10px;font-size:13px;color:var(--text2);letter-spacing:.5px;">平均所要時間</h4>
+  <div class="cards" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px;">
+    <div class="card"><div class="label">直近7日</div><div class="value" id="dur-7d" style="font-size:20px;">--</div></div>
+    <div class="card"><div class="label">直近30日</div><div class="value" id="dur-30d" style="font-size:20px;">--</div></div>
+    <div class="card"><div class="label">全期間</div><div class="value" id="dur-all" style="font-size:20px;">--</div></div>
+  </div>
+
+  <!-- Cost by day bar chart -->
+  <h4 style="margin-bottom:10px;font-size:13px;color:var(--text2);letter-spacing:.5px;">日別コスト（直近30日）</h4>
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:24px;">
+    <div id="metrics-cost-chart-wrap">
+      <svg id="metrics-cost-bar-chart" width="100%" height="90" style="display:block;"></svg>
+      <div id="metrics-cost-chart-empty" class="empty-text" style="display:none;">コストデータがありません。</div>
+    </div>
+  </div>
+
+  <!-- Top repos table -->
+  <h4 style="margin-bottom:10px;font-size:13px;color:var(--text2);letter-spacing:.5px;">リポジトリ別統計（上位10件）</h4>
+  <table id="metrics-repos-table">
+    <thead><tr><th>リポジトリ</th><th>完了</th><th>失敗</th><th>合計</th><th>失敗率</th></tr></thead>
+    <tbody id="metrics-repos-tbody"><tr><td colspan="5" class="loading-text">読み込み中...</td></tr></tbody>
+  </table>
+
+  <!-- Detailed health -->
+  <h4 style="margin:24px 0 10px;font-size:13px;color:var(--text2);letter-spacing:.5px;">詳細ヘルス</h4>
+  <div id="metrics-health-detail" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;">
+    <span class="loading-text">読み込み中...</span>
   </div>
 </div>
 
@@ -1246,6 +1308,178 @@ const SettingsTab = {
 };
 
 // ===========================================================================
+// Metrics Tab
+// ===========================================================================
+const MetricsTab = {
+  async load() {
+    try {
+      const [metrics, health] = await Promise.all([
+        Api.getJSON('/api/metrics'),
+        Api.getJSON('/api/health/detailed'),
+      ]);
+      this._renderSuccessRate(metrics.success_rate);
+      this._renderDuration(metrics.avg_duration_sec);
+      this._renderCostByDay(metrics.cost_by_day);
+      this._renderTopRepos(metrics.top_repos);
+      this._renderHealth(health);
+    } catch (e) {
+      const banner = Utils.$('metrics-health-banner');
+      banner.style.display = '';
+      banner.style.background = 'rgba(248,81,73,.15)';
+      banner.style.color = 'var(--red)';
+      banner.textContent = 'メトリクス読み込み失敗: ' + e.message;
+    }
+  },
+
+  _pctText(rate) {
+    if (rate == null) return '--';
+    return Math.round(rate * 100) + '%';
+  },
+
+  _renderSuccessRate(sr) {
+    const windows = [['7d', 'sr-7d', 'sr-7d-sub'], ['30d', 'sr-30d', 'sr-30d-sub'], ['all', 'sr-all', 'sr-all-sub']];
+    for (const [w, vid, sid] of windows) {
+      const d = sr[w] || {};
+      const el = Utils.$(vid);
+      const pct = this._pctText(d.rate);
+      const color = d.rate == null ? 'var(--text2)' : d.rate >= 0.8 ? 'var(--green)' : d.rate >= 0.5 ? 'var(--yellow)' : 'var(--red)';
+      if (el) { el.textContent = pct; el.style.color = color; }
+      const sub = Utils.$(sid);
+      if (sub) sub.textContent = d.total > 0 ? `完了${d.done} / 失敗${d.failed} / 計${d.total}` : 'データなし';
+    }
+  },
+
+  _renderDuration(avg) {
+    const map = [['7d', 'dur-7d'], ['30d', 'dur-30d'], ['all', 'dur-all']];
+    for (const [w, id] of map) {
+      const el = Utils.$(id);
+      if (el) el.textContent = Utils.fmtDuration(avg[w]);
+    }
+  },
+
+  _renderCostByDay(costByDay) {
+    const svg = Utils.$('metrics-cost-bar-chart');
+    const empty = Utils.$('metrics-cost-chart-empty');
+    if (!svg) return;
+    if (!costByDay || !costByDay.length) {
+      svg.style.display = 'none';
+      if (empty) empty.style.display = '';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+    svg.style.display = 'block';
+    const svgW = svg.clientWidth || 700;
+    const svgH = 90;
+    const padTop = 14;  // space for date labels at bottom
+    const chartH = svgH - padTop - 16;
+    const maxCost = Math.max(...costByDay.map(d => d.cost_usd), 0.0001);
+    const barW = Math.max(6, Math.floor((svgW - costByDay.length * 2) / costByDay.length));
+    const bars = costByDay.map((d, i) => {
+      const h = Math.max(2, Math.round((d.cost_usd / maxCost) * chartH));
+      const x = i * (barW + 2);
+      const y = padTop + chartH - h;
+      const lbl = i % Math.max(1, Math.ceil(costByDay.length / 10)) === 0
+        ? d.date.slice(5)  // MM-DD
+        : '';
+      return `<rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="var(--accent)" opacity="0.75" rx="2">
+        <title>${d.date}: $${d.cost_usd.toFixed(4)}</title></rect>` +
+        (lbl ? `<text x="${x + barW/2}" y="${svgH - 2}" text-anchor="middle" font-size="8" fill="var(--text2)">${lbl}</text>` : '');
+    }).join('');
+    svg.innerHTML = bars;
+    svg.setAttribute('viewBox', `0 0 ${costByDay.length * (barW + 2)} ${svgH}`);
+  },
+
+  _renderTopRepos(repos) {
+    const tbody = Utils.$('metrics-repos-tbody');
+    if (!tbody) return;
+    if (!repos || !repos.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-text">データがありません。</td></tr>';
+      return;
+    }
+    tbody.innerHTML = repos.map(r => {
+      const repoShort = Utils.repoShort(r.repo);
+      const failPct = r.failure_rate != null ? Math.round(r.failure_rate * 100) + '%' : '--';
+      const failColor = r.failure_rate == null ? 'var(--text2)'
+        : r.failure_rate <= 0.2 ? 'var(--green)'
+        : r.failure_rate <= 0.5 ? 'var(--yellow)'
+        : 'var(--red)';
+      return `<tr>
+        <td title="${Utils.escHtml(r.repo)}" style="font-family:monospace;font-size:12px;">${Utils.escHtml(repoShort)}</td>
+        <td style="color:var(--green);font-weight:600;">${r.done}</td>
+        <td style="color:var(--red);">${r.failed}</td>
+        <td>${r.total}</td>
+        <td style="color:${failColor};font-weight:600;">${failPct}</td>
+      </tr>`;
+    }).join('');
+  },
+
+  _renderHealth(h) {
+    // Banner
+    const banner = Utils.$('metrics-health-banner');
+    if (banner) {
+      banner.style.display = '';
+      const colors = { healthy: ['rgba(63,185,80,.15)', 'var(--green)'], degraded: ['rgba(210,153,34,.15)', 'var(--yellow)'], critical: ['rgba(248,81,73,.15)', 'var(--red)'] };
+      const [bg, fg] = colors[h.overall] || colors.critical;
+      banner.style.background = bg;
+      banner.style.color = fg;
+      const icons = { healthy: '✅', degraded: '⚠️', critical: '🔴' };
+      banner.textContent = `${icons[h.overall] || ''} システム状態: ${h.overall.toUpperCase()}`;
+    }
+
+    const detail = Utils.$('metrics-health-detail');
+    if (!detail) return;
+
+    const agentAge = h.agent.last_heartbeat_age_sec;
+    const agentAgeStr = agentAge != null ? agentAge + '秒前' : 'N/A';
+    const agentColor = h.agent.alive ? 'var(--green)' : 'var(--red)';
+    const agentLabel = h.agent.alive ? '✅ 稼働中' : '🔴 停止中';
+
+    const q = h.queue || {};
+    const disk = h.disk;
+    const diskStr = disk
+      ? `${disk.used_gb}GB / ${disk.total_gb}GB (${disk.percent_used}%)`
+      : 'N/A';
+    const diskColor = disk && disk.percent_used > 90 ? 'var(--red)' : disk && disk.percent_used > 75 ? 'var(--yellow)' : 'var(--text)';
+
+    const logsMB = (h.logs_size_bytes / (1024 * 1024)).toFixed(1);
+    const oldestPending = q.oldest_pending_age_sec != null ? Utils.fmtDuration(q.oldest_pending_age_sec) : 'なし';
+    const recent = h.recent_1h || {};
+
+    detail.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div>
+          <div style="margin-bottom:8px;font-size:13px;font-weight:600;color:var(--text2);">エージェント</div>
+          <div style="margin-bottom:4px;color:${agentColor};font-weight:600;">${agentLabel}</div>
+          <div style="font-size:12px;color:var(--text2);">最終ハートビート: ${agentAgeStr}</div>
+        </div>
+        <div>
+          <div style="margin-bottom:8px;font-size:13px;font-weight:600;color:var(--text2);">キュー</div>
+          <div style="font-size:12px;line-height:1.8;">
+            待機中: <strong>${q.pending || 0}</strong>&nbsp;&nbsp;
+            実行中: <strong style="color:var(--accent)">${q.running || 0}</strong><br>
+            完了: <strong style="color:var(--green)">${q.done || 0}</strong>&nbsp;&nbsp;
+            失敗: <strong style="color:var(--red)">${q.failed || 0}</strong><br>
+            最古の待機ジョブ: ${oldestPending}
+          </div>
+        </div>
+        <div>
+          <div style="margin-bottom:8px;font-size:13px;font-weight:600;color:var(--text2);">ディスク</div>
+          <div style="font-size:12px;color:${diskColor};">${diskStr}</div>
+          <div style="font-size:12px;color:var(--text2);">ログ合計: ${logsMB} MB</div>
+        </div>
+        <div>
+          <div style="margin-bottom:8px;font-size:13px;font-weight:600;color:var(--text2);">直近1時間</div>
+          <div style="font-size:12px;line-height:1.8;">
+            完了: <strong style="color:var(--green)">${recent.done || 0}</strong>&nbsp;&nbsp;
+            失敗: <strong style="color:var(--red)">${recent.failed || 0}</strong>
+          </div>
+          <div style="font-size:11px;color:var(--text2);margin-top:4px;">確認時刻: ${new Date(h.checked_at).toLocaleString()}</div>
+        </div>
+      </div>`;
+  },
+};
+
+// ===========================================================================
 // Kanban Tab
 // ===========================================================================
 const KanbanTab = {
@@ -1522,6 +1756,7 @@ const Router = {
     jobs: () => JobsTab.load(),
     logs: () => LogUI.loadJobSelect(),
     notifications: () => NotifTab.load(),
+    metrics: () => MetricsTab.load(),
     settings: () => { SettingsTab.loadLogStats(); SettingsTab.loadCosts(); },
     kanban: () => { KanbanTab.load(); KanbanTab.startAutoRefresh(); },
     prs: () => {},
@@ -1593,6 +1828,9 @@ const Router = {
 
   // Auto-queue Tab
   AutoQueueTab.init();
+
+  // Metrics refresh button
+  Utils.$('metrics-refresh-btn').addEventListener('click', () => MetricsTab.load());
 
   // Initial load
   DashboardTab.load();

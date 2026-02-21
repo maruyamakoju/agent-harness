@@ -7,13 +7,14 @@ import hmac
 import json
 import os
 import re
+import shutil
 import time
 import uuid
 import hashlib
 import secrets
 import urllib.request
 import urllib.error
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 
@@ -88,6 +89,10 @@ _cost_per_job_cache: dict[str, float | None] = {}
 # Costs cache: TTL-based to avoid full-scan on every request
 _costs_cache: dict = {"data": None, "ts": 0.0}
 _COSTS_TTL = 60.0  # seconds
+
+# Metrics cache: aggregated success/cost/duration stats
+_metrics_cache: dict = {"data": None, "ts": 0.0}
+_METRICS_TTL = 120.0  # seconds
 
 # Log endpoint: refuse to load more than this many bytes into memory at once
 MAX_LOG_BYTES = 5 * 1024 * 1024  # 5 MB
@@ -948,6 +953,217 @@ def api_costs():
     _costs_cache["data"] = result
     _costs_cache["ts"] = now
     return jsonify(result)
+
+
+# ===== API: Metrics =========================================================
+
+@app.route("/api/metrics")
+@require_auth
+def api_metrics():
+    """Aggregate success rates, durations, costs, and top repos.
+
+    Response is cached for _METRICS_TTL seconds to avoid repeated full scans.
+    """
+    now = time.time()
+    if _metrics_cache["data"] is not None and (now - _metrics_cache["ts"]) < _METRICS_TTL:
+        return jsonify(_metrics_cache["data"])
+
+    now_dt = datetime.now(timezone.utc)
+    cutoffs = {
+        "7d":  now_dt - timedelta(days=7),
+        "30d": now_dt - timedelta(days=30),
+    }
+
+    # Accumulators
+    sr: dict[str, dict[str, int]] = {"7d": {}, "30d": {}, "all": {}}
+    dur_lists: dict[str, list[int]] = {"7d": [], "30d": [], "all": []}
+    cost_by_day: dict[str, float] = {}
+    repos: dict[str, dict[str, int]] = {}
+
+    for s in ("done", "failed"):
+        d = STATUS_DIRS[s]
+        if not d.is_dir():
+            continue
+        for f in d.glob("*.json"):
+            data = _read_json(f)
+            if not data:
+                continue
+            job_id = data.get("id", f.stem)
+            repo = data.get("repo", "")
+            if repo not in repos:
+                repos[repo] = {"done": 0, "failed": 0}
+            repos[repo][s] += 1
+
+            # Parse created_at
+            created_str = data.get("created_at", "")
+            created = None
+            try:
+                created = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+            except (ValueError, AttributeError):
+                pass
+
+            # Accumulate success rate counts
+            for window in ("7d", "30d", "all"):
+                cutoff = cutoffs.get(window)
+                in_window = (cutoff is None) or (created is not None and created >= cutoff)
+                if in_window:
+                    sr[window][s] = sr[window].get(s, 0) + 1
+
+            # Duration
+            dur = _get_cached_duration(job_id, s)
+            if dur is not None and created is not None:
+                for window in ("7d", "30d", "all"):
+                    cutoff = cutoffs.get(window)
+                    if cutoff is None or created >= cutoff:
+                        dur_lists[window].append(dur)
+
+            # Cost by calendar day
+            if created is not None:
+                cost = _get_cached_cost(job_id, s)
+                if cost is not None:
+                    dk = created.strftime("%Y-%m-%d")
+                    cost_by_day[dk] = round(cost_by_day.get(dk, 0.0) + cost, 6)
+
+    def _build_rate(w: dict) -> dict:
+        done = w.get("done", 0)
+        failed = w.get("failed", 0)
+        total = done + failed
+        return {
+            "done": done, "failed": failed, "total": total,
+            "rate": round(done / total, 3) if total > 0 else None,
+        }
+
+    def _avg(lst: list) -> int | None:
+        return round(sum(lst) / len(lst)) if lst else None
+
+    top_repos = sorted(
+        [
+            {
+                "repo": r,
+                "done": v["done"],
+                "failed": v["failed"],
+                "total": v["done"] + v["failed"],
+                "failure_rate": (
+                    round(v["failed"] / (v["done"] + v["failed"]), 3)
+                    if (v["done"] + v["failed"]) > 0 else None
+                ),
+            }
+            for r, v in repos.items()
+        ],
+        key=lambda x: x["total"],
+        reverse=True,
+    )[:10]
+
+    # Cost by day — last 30 calendar days, sorted ascending
+    cost_by_day_list = sorted(
+        [{"date": dk, "cost_usd": round(c, 4)} for dk, c in cost_by_day.items()],
+        key=lambda x: x["date"],
+    )[-30:]
+
+    result = {
+        "success_rate": {
+            "7d":  _build_rate(sr["7d"]),
+            "30d": _build_rate(sr["30d"]),
+            "all": _build_rate(sr["all"]),
+        },
+        "avg_duration_sec": {
+            "7d":  _avg(dur_lists["7d"]),
+            "30d": _avg(dur_lists["30d"]),
+            "all": _avg(dur_lists["all"]),
+        },
+        "cost_by_day": cost_by_day_list,
+        "top_repos": top_repos,
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    _metrics_cache["data"] = result
+    _metrics_cache["ts"] = now
+    return jsonify(result)
+
+
+# ===== API: Detailed Health =================================================
+
+@app.route("/api/health/detailed")
+@require_auth
+def api_health_detailed():
+    """Return a rich health snapshot: agent liveness, queue depths, disk, recent jobs."""
+    now_dt = datetime.now(timezone.utc)
+    now_ts = time.time()
+
+    # Agent liveness from heartbeat
+    heartbeat = _read_json(HEARTBEAT_FILE) or {}
+    hb_ts_str = heartbeat.get("timestamp", "")
+    hb_age: int | None = None
+    agent_alive = False
+    try:
+        hb_ts = datetime.fromisoformat(hb_ts_str.replace("Z", "+00:00"))
+        hb_age = int((now_dt - hb_ts).total_seconds())
+        agent_alive = hb_age < 120  # alive if heartbeat < 2 min ago
+    except (ValueError, AttributeError):
+        pass
+
+    # Queue depths + oldest pending
+    counts: dict[str, int] = {}
+    oldest_pending_age: int | None = None
+    for s, d in STATUS_DIRS.items():
+        files = list(d.glob("*.json")) if d.is_dir() else []
+        counts[s] = len(files)
+        if s == "pending" and files:
+            oldest_mtime = min(f.stat().st_mtime for f in files)
+            oldest_pending_age = int(now_ts - oldest_mtime)
+
+    # Disk usage (harness partition)
+    disk_info: dict | None = None
+    try:
+        disk = shutil.disk_usage(str(HARNESS))
+        disk_info = {
+            "total_gb": round(disk.total / 1e9, 2),
+            "used_gb":  round(disk.used  / 1e9, 2),
+            "free_gb":  round(disk.free  / 1e9, 2),
+            "percent_used": round(disk.used / disk.total * 100, 1) if disk.total else 0.0,
+        }
+    except Exception:
+        pass
+
+    # Total size of log directory
+    logs_size = 0
+    if LOGS_DIR.is_dir():
+        logs_size = sum(f.stat().st_size for f in LOGS_DIR.iterdir() if f.is_file())
+
+    # Activity in last 1 hour (by file mtime)
+    cutoff_1h = now_ts - 3600
+    recent_1h: dict[str, int] = {"done": 0, "failed": 0}
+    for s in ("done", "failed"):
+        d = STATUS_DIRS[s]
+        if d.is_dir():
+            recent_1h[s] = sum(1 for f in d.glob("*.json") if f.stat().st_mtime >= cutoff_1h)
+
+    # Determine overall health
+    overall: str
+    if not agent_alive:
+        overall = "critical"
+    elif (disk_info and disk_info["percent_used"] > 90) or counts.get("failed", 0) > max(counts.get("done", 0), 1) * 2:
+        overall = "degraded"
+    else:
+        overall = "healthy"
+
+    return jsonify({
+        "overall": overall,
+        "agent": {
+            "alive": agent_alive,
+            "last_heartbeat_age_sec": hb_age,
+        },
+        "queue": {
+            "pending": counts.get("pending", 0),
+            "running": counts.get("running", 0),
+            "done":    counts.get("done", 0),
+            "failed":  counts.get("failed", 0),
+            "oldest_pending_age_sec": oldest_pending_age,
+        },
+        "disk": disk_info,
+        "logs_size_bytes": logs_size,
+        "recent_1h": recent_1h,
+        "checked_at": now_dt.isoformat().replace("+00:00", "Z"),
+    })
 
 
 # ===== SSE: Kanban Stream ===================================================

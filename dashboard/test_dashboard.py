@@ -1499,6 +1499,83 @@ class TestRetryCount:
 
 
 # ---------------------------------------------------------------------------
+# Metrics API (/api/metrics)
+# ---------------------------------------------------------------------------
+class TestMetrics:
+    def test_metrics_returns_200(self, client):
+        r = client.get("/api/metrics")
+        assert r.status_code == 200
+
+    def test_metrics_has_required_keys(self, client):
+        import app as app_module
+        app_module._metrics_cache["data"] = None  # clear cache to force fresh compute
+        r = client.get("/api/metrics")
+        data = r.get_json()
+        for key in ("success_rate", "avg_duration_sec", "cost_by_day", "top_repos", "generated_at"):
+            assert key in data, f"Missing key: {key}"
+
+    def test_metrics_success_rate_has_windows(self, client):
+        import app as app_module
+        app_module._metrics_cache["data"] = None
+        r = client.get("/api/metrics")
+        sr = r.get_json()["success_rate"]
+        for window in ("7d", "30d", "all"):
+            assert window in sr
+            w = sr[window]
+            assert "done" in w and "failed" in w and "total" in w
+
+    def test_metrics_cache_is_populated(self, client):
+        import app as app_module
+        app_module._metrics_cache["data"] = None
+        app_module._metrics_cache["ts"] = 0.0
+        client.get("/api/metrics")
+        assert app_module._metrics_cache["data"] is not None
+        assert app_module._metrics_cache["ts"] > 0
+
+    def test_metrics_requires_auth(self, auth_client):
+        """Without authentication, the metrics endpoint returns 401."""
+        r = auth_client.get("/api/metrics")
+        assert r.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Detailed Health API (/api/health/detailed)
+# ---------------------------------------------------------------------------
+class TestDetailedHealth:
+    def test_health_returns_200(self, client):
+        r = client.get("/api/health/detailed")
+        assert r.status_code == 200
+
+    def test_health_has_required_keys(self, client):
+        r = client.get("/api/health/detailed")
+        data = r.get_json()
+        for key in ("overall", "agent", "queue", "disk", "logs_size_bytes", "recent_1h", "checked_at"):
+            assert key in data, f"Missing key: {key}"
+
+    def test_health_overall_is_valid_value(self, client):
+        r = client.get("/api/health/detailed")
+        overall = r.get_json()["overall"]
+        assert overall in ("healthy", "degraded", "critical")
+
+    def test_health_queue_counts_match_fixtures(self, client):
+        r = client.get("/api/health/detailed")
+        q = r.get_json()["queue"]
+        # The test fixtures have: 1 done, 1 failed, 1 running, 0 pending (base)
+        assert isinstance(q["pending"], int)
+        assert isinstance(q["running"], int)
+        assert isinstance(q["done"], int)
+        assert isinstance(q["failed"], int)
+        assert q["done"] >= 1   # at least the test-done fixture
+        assert q["failed"] >= 1  # at least the test-failed fixture
+        assert q["running"] >= 1  # at least the test-running fixture
+
+    def test_health_requires_auth(self, auth_client):
+        """Without authentication, the health endpoint returns 401."""
+        r = auth_client.get("/api/health/detailed")
+        assert r.status_code == 401
+
+
+# ---------------------------------------------------------------------------
 # Legacy compatibility - keep the original runner for backward compat
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":

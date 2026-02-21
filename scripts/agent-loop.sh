@@ -17,6 +17,10 @@ LOOP_LOG="${LOGS_DIR}/agent-loop.jsonl"
 HEARTBEAT_FILE="${LOGS_DIR}/heartbeat.json"
 POLL_INTERVAL="${POLL_INTERVAL:-30}"
 
+# Adaptive polling: back off when idle, sprint when active
+IDLE_BACKOFF_MAX=300   # cap at 5 minutes when fully idle
+_idle_backoff=0         # current idle sleep seconds (0 = use POLL_INTERVAL)
+
 # Circuit breaker state
 CONSECUTIVE_FAILURES=0
 MAX_CONSECUTIVE_FAILURES=3
@@ -175,6 +179,8 @@ check_gpu_available() {
 # ---------------------------------------------------------------------------
 # Pick oldest eligible pending job and atomically claim it (flock)
 # Returns path in running/ or empty string if none available
+# Skips GPU-required jobs when GPU unavailable.
+# Skips expired jobs (expires_at field) and moves them to failed/.
 # ---------------------------------------------------------------------------
 pick_and_claim_job() {
     local gpu_ok="${1:-true}"
@@ -189,15 +195,38 @@ pick_and_claim_job() {
                 printf '%02d\t%s\n' "$prio" "$f"
             done | sort -k1,1n -k2,2 | cut -f2
         )
+        local now_epoch
+        now_epoch=$(date +%s)
         local job_file
         while IFS= read -r job_file; do
             [[ -z "$job_file" ]] && continue
+
+            # Check job expiry: if expires_at is set and in the past, fail the job
+            local expires_at
+            expires_at=$(jq -r '.expires_at // empty' "$job_file" 2>/dev/null)
+            if [[ -n "$expires_at" ]]; then
+                local exp_epoch
+                exp_epoch=$(date -d "$expires_at" +%s 2>/dev/null || echo 0)
+                if [[ $exp_epoch -gt 0 && $now_epoch -gt $exp_epoch ]]; then
+                    local exp_id; exp_id=$(jq -r '.id // "unknown"' "$job_file" 2>/dev/null)
+                    local exp_bn; exp_bn=$(basename "$job_file")
+                    # Mark expired before moving
+                    jq '. + {"failed_reason": "expired", "failed_at": (now | todate)}' \
+                        "$job_file" 2>/dev/null > "${job_file}.tmp" && mv "${job_file}.tmp" "$job_file" || true
+                    mv "$job_file" "$JOBS_DIR/failed/$exp_bn" 2>/dev/null || true
+                    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [WARN] JOB_EXPIRED id=$exp_id" >&2
+                    continue
+                fi
+            fi
+
             # Skip GPU-required jobs when GPU is unavailable
             if [[ "$gpu_ok" == "false" ]]; then
+                local gpu_req
                 gpu_req=$(jq -r '.gpu_required // false' "$job_file" 2>/dev/null || echo "false")
                 [[ "$gpu_req" == "true" ]] && continue
             fi
-            bn=$(basename "$job_file")
+
+            local bn; bn=$(basename "$job_file")
             if mv "$job_file" "$JOBS_DIR/running/$bn" 2>/dev/null; then
                 echo "$JOBS_DIR/running/$bn"
                 return
@@ -226,13 +255,16 @@ dispatch_job_async() {
     DAILY_JOB_COUNT=$((DAILY_JOB_COUNT + 1))
     save_quota_counter
 
-    # Retry wrapper - run asynchronously
+    # Retry wrapper with exponential backoff - run asynchronously
+    # Backoff schedule: 60s, 120s, 240s, 480s, ... capped at 900s (15 min)
     (
         local attempt=0
         while [[ $attempt -le $max_retries ]]; do
             if [[ $attempt -gt 0 ]]; then
-                log_event "WARN" "JOB_RETRY" "id=$job_id attempt=$((attempt+1))/$((max_retries+1))"
-                sleep 30
+                local sleep_secs=$(( 60 * (1 << (attempt - 1)) ))
+                [[ $sleep_secs -gt 900 ]] && sleep_secs=900
+                log_event "WARN" "JOB_RETRY" "id=$job_id attempt=$((attempt+1))/$((max_retries+1)) backoff=${sleep_secs}s"
+                sleep "$sleep_secs"
             fi
             if "$SCRIPTS_DIR/run-job.sh" "$job_file"; then exit 0; fi
             attempt=$((attempt + 1))
@@ -277,6 +309,49 @@ reap_completed_jobs() {
         [[ -n "$pid" ]] || continue
         unset "RUNNING_PIDS[$pid]"
         unset "RUNNING_FILES[$pid]"
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Reap zombie jobs: running/*.json not tracked by any known PID that have
+# exceeded their time_budget + 1800s grace period.
+# This recovers from agent restarts leaving stale running files.
+# ---------------------------------------------------------------------------
+reap_zombie_jobs() {
+    local now
+    now=$(date +%s)
+    for job_file in "$JOBS_DIR/running/"*.json; do
+        [[ -f "$job_file" ]] || continue
+        local bn; bn=$(basename "$job_file")
+
+        # Check if this file is tracked by any known PID
+        local tracked=false
+        local pid
+        for pid in "${!RUNNING_FILES[@]}"; do
+            if [[ "${RUNNING_FILES[$pid]}" == "$bn" ]]; then
+                tracked=true
+                break
+            fi
+        done
+        [[ "$tracked" == "true" ]] && continue
+
+        # Untracked: check age against time_budget + grace period
+        local time_budget
+        time_budget=$(jq -r '.time_budget_sec // 3600' "$job_file" 2>/dev/null || echo 3600)
+        local grace=1800  # 30-minute grace after budget expires
+        local file_mtime
+        file_mtime=$(stat -c %Y "$job_file" 2>/dev/null || stat -f %m "$job_file" 2>/dev/null || echo 0)
+        local age=$(( now - file_mtime ))
+
+        if [[ $age -gt $(( time_budget + grace )) ]]; then
+            local job_id; job_id=$(jq -r '.id // "unknown"' "$job_file" 2>/dev/null)
+            jq '. + {"failed_reason": "zombie_reaped", "failed_at": (now | todate)}' \
+                "$job_file" 2>/dev/null > "${job_file}.tmp" && mv "${job_file}.tmp" "$job_file" || true
+            mv "$job_file" "$JOBS_DIR/failed/$bn" 2>/dev/null || true
+            CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+            log_event "ERROR" "ZOMBIE_DETECTED" "id=$job_id age=${age}s budget=${time_budget}s grace=${grace}s"
+            "$SCRIPTS_DIR/notify.sh" "job_failed" "$job_id" "zombie_reaped age=${age}s" &
+        fi
     done
 }
 
@@ -376,6 +451,9 @@ main() {
         # Reap any completed jobs first
         reap_completed_jobs
 
+        # Reap zombie jobs (untracked running/*.json that have outlived their budget)
+        reap_zombie_jobs
+
         # Update heartbeat every ~60s, system info every ~5min
         heartbeat_counter=$((heartbeat_counter + 1))
         if [[ $((heartbeat_counter % 2)) -eq 0 ]]; then
@@ -425,11 +503,13 @@ main() {
         local gpu_ok
         gpu_ok=$(check_gpu_available)
         local slots=$(( MAX_PARALLEL_JOBS - ${#RUNNING_PIDS[@]} ))
+        local _dispatched_this_iter=0
         while [[ $slots -gt 0 ]]; do
             local next_job
             next_job=$(pick_and_claim_job "$gpu_ok")
             [[ -z "$next_job" ]] && break
             dispatch_job_async "$next_job"
+            _dispatched_this_iter=$(( _dispatched_this_iter + 1 ))
             slots=$(( slots - 1 ))
             check_daily_quota || break
         done
@@ -450,7 +530,22 @@ main() {
             fi
         fi
 
-        sleep "$POLL_INTERVAL" & wait $! 2>/dev/null || true
+        # Adaptive polling:
+        #   - Sprint (5s) when jobs are running or were just dispatched.
+        #   - Exponential backoff (up to IDLE_BACKOFF_MAX) when fully idle.
+        if [[ $_dispatched_this_iter -gt 0 ]] || [[ ${#RUNNING_PIDS[@]} -gt 0 ]]; then
+            _idle_backoff=0
+            sleep 5 & wait $! 2>/dev/null || true
+        else
+            if [[ $_idle_backoff -eq 0 ]]; then
+                _idle_backoff=$POLL_INTERVAL
+            else
+                _idle_backoff=$(( _idle_backoff * 2 ))
+                [[ $_idle_backoff -gt $IDLE_BACKOFF_MAX ]] && _idle_backoff=$IDLE_BACKOFF_MAX
+            fi
+            log_event "DEBUG" "IDLE_POLL" "next_check_in=${_idle_backoff}s"
+            sleep "$_idle_backoff" & wait $! 2>/dev/null || true
+        fi
     done
 }
 

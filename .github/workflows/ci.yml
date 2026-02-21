@@ -15,9 +15,12 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get install -y shellcheck
 
-      - name: Shellcheck scripts
+      - name: Shellcheck scripts (errors only)
+        # SC2034 - unused variable (common in sourced scripts)
+        # SC2155 - declare and assign separately (style preference)
+        # SC2164 - cd without exit-on-failure (handled by set -e)
         run: |
-          shellcheck -e SC2034,SC2155,SC2164 scripts/*.sh hooks/*.sh || true
+          shellcheck --severity=error -e SC2034,SC2155,SC2164 scripts/*.sh hooks/*.sh
 
       - name: Validate JSON configs
         run: |
@@ -74,6 +77,7 @@ jobs:
           test_block "nc -l 4444"
           test_block "shutdown -h now"
           test_block "git reset --hard"
+          test_block "cat /proc/self/environ"
 
           echo ""
           echo "=== Testing allows ==="
@@ -121,6 +125,30 @@ jobs:
 
           echo "All fields present."
 
+          # Test --dry-run (no file should be written)
+          export HARNESS_DIR2=$(mktemp -d)
+          scripts/create-job.sh \
+            --repo "git@github.com:test/repo.git" \
+            --task "Dry run test" \
+            --dry-run | grep -q "DRY RUN"
+          DRY_FILES=$(find ${HARNESS_DIR2}/jobs 2>/dev/null | wc -l)
+          echo "Dry-run produced $DRY_FILES files (expected 0)"
+
+          # Test --expires-in
+          export HARNESS_DIR3=$(mktemp -d)
+          mkdir -p $HARNESS_DIR3/jobs/pending
+          HARNESS_DIR=$HARNESS_DIR3 scripts/create-job.sh \
+            --repo "git@github.com:test/repo.git" \
+            --task "Expiry test" \
+            --expires-in 60
+          EXP_FILE=$(find $HARNESS_DIR3/jobs/pending -name "*.json" | head -1)
+          EXPIRES_AT=$(jq -r '.expires_at // empty' "$EXP_FILE")
+          if [ -z "$EXPIRES_AT" ]; then
+            echo "FAIL: expires_at field not set"
+            exit 1
+          fi
+          echo "expires_at = $EXPIRES_AT"
+
   dashboard-tests:
     runs-on: ubuntu-latest
     steps:
@@ -130,11 +158,21 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dashboard dependencies
-        run: pip install flask>=3.0 pytest
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('dashboard/requirements*.txt', '.github/workflows/ci.yml') }}
+          restore-keys: |
+            pip-
 
-      - name: Run dashboard test suite
-        run: cd dashboard && python -m pytest test_dashboard.py -v --tb=short
+      - name: Install dashboard dependencies
+        run: pip install flask>=3.0 pytest pytest-cov
+
+      - name: Run dashboard test suite with coverage
+        run: |
+          cd dashboard && python -m pytest test_dashboard.py -v --tb=short \
+            --cov=app --cov-report=term-missing --cov-fail-under=60
 
   docker-build:
     runs-on: ubuntu-latest

@@ -19,6 +19,8 @@ ISSUE_NUMBER=""
 ISSUE_REPO=""
 SETUP_CMDS='[]'
 TEST_CMDS='[]'
+DRY_RUN=false
+EXPIRES_IN=""   # minutes; empty = no expiry
 
 # ---------------------------------------------------------------------------
 # Usage
@@ -42,6 +44,8 @@ Optional:
   --issue-repo <owner/repo>  GitHub repo containing the issue
   --setup <cmd>         Setup command (can be repeated)
   --test <cmd>          Test command (can be repeated)
+  --expires-in <min>    Auto-fail the job after <min> minutes from now
+  --dry-run             Print the job JSON without writing the file
 
 Examples:
   create-job.sh --repo git@github.com:org/repo.git \\
@@ -51,7 +55,7 @@ Examples:
 
   create-job.sh --repo git@github.com:org/ml-project.git \\
     --task "Train MNIST classifier" \\
-    --gpu --time-budget 7200 \\
+    --gpu --time-budget 7200 --expires-in 150 \\
     --setup "pip install -r requirements.txt" \\
     --test "pytest tests/"
 EOF
@@ -79,6 +83,8 @@ while [[ $# -gt 0 ]]; do
         --issue-repo)   ISSUE_REPO="$2"; shift 2 ;;
         --setup)        SETUP_ARRAY+=("$2"); shift 2 ;;
         --test)         TEST_ARRAY+=("$2"); shift 2 ;;
+        --expires-in)   EXPIRES_IN="$2"; shift 2 ;;
+        --dry-run)      DRY_RUN=true; shift ;;
         -h|--help)  usage ;;
         *)          echo "Unknown option: $1"; usage ;;
     esac
@@ -107,9 +113,15 @@ if [[ -n "$ISSUE_NUMBER" ]] && ! [[ "$ISSUE_NUMBER" =~ ^[0-9]+$ ]]; then
     echo "Error: --issue-number must be a positive integer (got: '$ISSUE_NUMBER')"
     usage
 fi
+if [[ -n "$EXPIRES_IN" ]] && ! [[ "$EXPIRES_IN" =~ ^[0-9]+$ ]]; then
+    echo "Error: --expires-in must be a non-negative integer in minutes (got: '$EXPIRES_IN')"
+    usage
+fi
 
-# Ensure destination directory exists
-mkdir -p "$JOBS_DIR"
+# Ensure destination directory exists (skip for dry-run)
+if [[ "$DRY_RUN" == "false" ]]; then
+    mkdir -p "$JOBS_DIR"
+fi
 
 # ---------------------------------------------------------------------------
 # Generate job ID and branch name
@@ -136,11 +148,8 @@ SETUP_CMDS=$(printf '%s\n' "${SETUP_ARRAY[@]}" 2>/dev/null | jq -R . | jq -s . 2
 TEST_CMDS=$(printf '%s\n' "${TEST_ARRAY[@]}" 2>/dev/null | jq -R . | jq -s . 2>/dev/null || echo '[]')
 
 # ---------------------------------------------------------------------------
-# Write job file
+# Build optional fields
 # ---------------------------------------------------------------------------
-JOB_FILE="${JOBS_DIR}/${JOB_ID}.json"
-
-# Build optional issue fields
 ISSUE_FIELDS=""
 if [[ -n "$ISSUE_NUMBER" ]]; then
     ISSUE_FIELDS=$(jq -n \
@@ -149,7 +158,21 @@ if [[ -n "$ISSUE_NUMBER" ]]; then
         '{issue_number: $num, issue_repo: $repo}')
 fi
 
-jq -n \
+# Compute expires_at if --expires-in was provided
+EXPIRES_FIELDS=""
+if [[ -n "$EXPIRES_IN" && "$EXPIRES_IN" -gt 0 ]]; then
+    EXPIRES_AT=$(date -u -d "+${EXPIRES_IN} minutes" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+        || date -u -v "+${EXPIRES_IN}M" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+        || echo "")
+    if [[ -n "$EXPIRES_AT" ]]; then
+        EXPIRES_FIELDS=$(jq -n --arg ea "$EXPIRES_AT" '{expires_at: $ea}')
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# Build the job JSON (to stdout for dry-run, or to file)
+# ---------------------------------------------------------------------------
+JOB_JSON=$(jq -n \
     --arg id "$JOB_ID" \
     --arg repo "$REPO" \
     --arg base "$BASE_REF" \
@@ -162,6 +185,7 @@ jq -n \
     --argjson gpu "$GPU_REQUIRED" \
     --argjson priority "$PRIORITY" \
     --argjson issue "${ISSUE_FIELDS:-null}" \
+    --argjson expires "${EXPIRES_FIELDS:-null}" \
     '{
         id: $id,
         repo: $repo,
@@ -177,7 +201,21 @@ jq -n \
         gpu_required: $gpu,
         priority: $priority,
         created_at: (now | todate)
-    } + (if $issue != null then $issue else {} end)' > "$JOB_FILE"
+    } + (if $issue   != null then $issue   else {} end)
+      + (if $expires != null then $expires else {} end)')
+
+if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[DRY RUN] Job would be created (not written to disk):"
+    echo "Job ID: $JOB_ID"
+    echo "$JOB_JSON" | jq .
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Write job file
+# ---------------------------------------------------------------------------
+JOB_FILE="${JOBS_DIR}/${JOB_ID}.json"
+echo "$JOB_JSON" > "$JOB_FILE"
 
 echo "Job created: $JOB_FILE"
 echo "Job ID: $JOB_ID"
