@@ -221,24 +221,24 @@ jobs:
       - name: Verify image contents
         run: |
           echo "=== Checking installed tools ==="
-          docker run --rm agent-harness:test which git
-          docker run --rm agent-harness:test which jq
-          docker run --rm agent-harness:test which node
-          docker run --rm agent-harness:test which gh
-          docker run --rm agent-harness:test which python3
-          docker run --rm agent-harness:test node --version
-          docker run --rm agent-harness:test python3 --version
+          docker run --rm --entrypoint which agent-harness:test git
+          docker run --rm --entrypoint which agent-harness:test jq
+          docker run --rm --entrypoint which agent-harness:test node
+          docker run --rm --entrypoint which agent-harness:test gh
+          docker run --rm --entrypoint which agent-harness:test python3
+          docker run --rm --entrypoint node agent-harness:test --version
+          docker run --rm --entrypoint python3 agent-harness:test --version
 
           echo ""
           echo "=== Checking user ==="
-          docker run --rm agent-harness:test id
-          docker run --rm agent-harness:test whoami
+          docker run --rm --entrypoint id agent-harness:test
+          docker run --rm --entrypoint whoami agent-harness:test
 
           echo ""
           echo "=== Checking file permissions ==="
-          docker run --rm agent-harness:test ls -la /harness/scripts/
-          docker run --rm agent-harness:test ls -la /harness/hooks/
+          docker run --rm --entrypoint ls agent-harness:test -la /harness/scripts/
+          docker run --rm --entrypoint ls agent-harness:test -la /harness/hooks/
 
           echo ""
           echo "=== Checking harness structure ==="
-          docker run --rm agent-harness:test ls -la /harness/jobs/
+          docker run --rm --entrypoint ls agent-harness:test -la /harness/jobs/

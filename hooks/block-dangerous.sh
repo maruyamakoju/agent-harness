@@ -110,7 +110,7 @@ echo "$COMMAND" | grep -qiE '(cp|mv|cat)\s.*/etc/shadow' && block_command "CREDE
 
 # === Privilege Escalation ===
 # Also catch sudo( without space (e.g. $(sudo cmd) where sudo is preceded by open paren)
-echo "$COMMAND" | grep -qE '(^|[\s\(])(sudo|doas|pkexec)[\s\(]' && block_command "PRIVILEGE_ESCALATION" "sudo/doas/pkexec"
+echo "$COMMAND" | grep -qE '(^|[[:space:](])(sudo|doas|pkexec)[[:space:](]' && block_command "PRIVILEGE_ESCALATION" "sudo/doas/pkexec"
 echo "$COMMAND" | grep -qE '(^|\s)su\s+(-|root)' && block_command "PRIVILEGE_ESCALATION" "su root"
 echo "$COMMAND" | grep -qiE 'chmod\s+([0-7]*7[0-7]{2}|u\+s|g\+s|\+s)' && block_command "PRIVILEGE_ESCALATION" "dangerous chmod"
 echo "$COMMAND" | grep -qiE 'chown\s+(root|0:)' && block_command "PRIVILEGE_ESCALATION" "chown root"
