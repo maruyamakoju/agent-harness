@@ -4,13 +4,21 @@
 # States: CLONE → SETUP → INIT → CODE → TEST → PUSH → DONE
 # Handles: stall detection, time budget, conversation resume, partial push
 # =============================================================================
-set -uo pipefail
+set -euo pipefail
 
 JOB_FILE="$1"
 HARNESS_DIR="${HARNESS_DIR:-/harness}"
 LOGS_DIR="${HARNESS_DIR}/logs"
 SCRIPTS_DIR="${HARNESS_DIR}/scripts"
 WORKSPACES_DIR="${WORKSPACES_DIR:-/workspaces}"
+
+# ---------------------------------------------------------------------------
+# Validate job JSON before parsing (fail fast on corrupt files)
+# ---------------------------------------------------------------------------
+if ! jq empty "$JOB_FILE" 2>/dev/null; then
+    echo "[ERROR] Malformed job JSON: $JOB_FILE — skipping" >&2
+    exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Parse job JSON

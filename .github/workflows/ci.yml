@@ -6,9 +6,15 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel in-progress runs for the same branch to avoid duplicate CI
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -151,6 +157,7 @@ jobs:
 
   dashboard-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -172,15 +179,30 @@ jobs:
       - name: Run dashboard test suite with coverage
         run: |
           cd dashboard && python -m pytest test_dashboard.py -v --tb=short \
-            --cov=app --cov-report=term-missing --cov-fail-under=60
+            --cov=app --cov-report=term-missing --cov-fail-under=75
 
   docker-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
+      - name: Lint Dockerfile with hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: error
+
       - name: Build Docker image
         run: docker build -t agent-harness:test .
+
+      - name: Scan image for vulnerabilities (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "agent-harness:test"
+          format: "table"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"
 
       - name: Verify image contents
         run: |

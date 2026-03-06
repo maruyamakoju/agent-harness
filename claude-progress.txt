@@ -1,0 +1,53 @@
+# Progress Log
+## Task: Full Refactor + RevenueCat Application Strengthening
+## Status: COMPLETED
+
+### Completed
+
+#### Phase 0: Security Hotfixes
+- [x] S1: block-dangerous.sh — Docker allow list (ps/logs/inspect/images already permitted; added set -euo pipefail)
+- [x] S2: run-job.sh — changed `set -uo pipefail` → `set -euo pipefail`; notify.sh same fix
+- [x] S3: block-dangerous.sh pattern hardening:
+  - Backtick/subshell RCE bypass fixed: `sh \`curl...\`` pattern added
+  - sudo( no-space bypass fixed: pattern updated to `[\s\(](sudo|doas|pkexec)[\s\(]`
+  - Download+chmod bypass: now catches `chmod 755` (octal) not just `+x`
+  - `rm -rf $HOME` variants added (--recursive --force flags)
+  - New blocked patterns: `python -m http.server`, `python -m SimpleHTTPServer`, `strace`, `ltrace`, `git config core.hooksPath`, `git config core.fsmonitor`, `pip install --index-url` from non-official index
+
+#### Phase 1: Shell Script Reliability
+- [x] R1: Already done in previous rounds (trap cleanup EXIT + rm -f in cleanup function)
+- [x] R2: create-job.sh — atomic write via .tmp then mv
+- [x] R3: run-job.sh — JSON validation with `jq empty` before parsing fields
+- [x] R4: github-issue-handler.sh — replaced sed/grep/xargs with awk for robust field extraction (handles colons in values like URLs, image:tag)
+- [x] R5: notify.sh — added `--fail` and `--max-time 10` to curl calls, error logging to stderr
+- [x] R6: Already done in previous rounds (atomic tmp→rename in cancel-job.sh)
+
+#### Phase 2: Dashboard Code Quality
+- [x] D1: Notification factory — `_send_channel_notification()` helper; api_notify_test reduced from 60→25 lines
+- [x] D2: Request logging middleware — `@app.before_request`/`@app.after_request` JSON structured logs
+- [x] D3: Bounded LRU cache — `_cache_set()` with max 1000 entries; prevents memory growth on long-running instances
+- [x] D4: Unified API response — `_api_response()` wrapper with `{"success":true,"data":...,"ts":...}`; `?format=legacy` for backward compat
+- [x] D5: Activity cache — 10s TTL for `/api/activity` endpoint
+
+#### Phase 3: New High-Value Features
+- [x] F1: RevenueCat MCP — added to `.claude/mcp_servers.json` (https://mcp.revenuecat.ai/mcp), REVENUECAT_API_KEY in .env.example, guidance in CLAUDE.md
+- [x] F2: Prometheus `/metrics` endpoint — text/plain; version=0.0.4 with agent_jobs_total, agent_cost_total, agent_alive, agent_job_duration_avg_seconds; cached 15s
+- [x] F3: Batch API — `POST /api/jobs/batch` (max 50 jobs/request, partial error reporting)
+- [x] F4: Webhook management — `GET/POST /api/webhooks`, `DELETE /api/webhooks/:id`, config/webhooks.json
+- [x] F5: API versioning — `/api/v1/` Blueprint (jobs, status, batch, health, metrics, cancel)
+
+#### Phase 4: Infrastructure Hardening
+- [x] I1: CI security scans — hadolint Dockerfile linting + Trivy vulnerability scan added to docker-build job
+- [x] I2: Log rotation — `logging: json-file max-size:100m max-file:5` on agent container; 50m/3 on dashboard
+- [x] I3: Coverage threshold raised from 60% → 75% in CI; actual coverage: 83%
+- [x] I4: README — MCP Server Integration, RevenueCat Integration, and Security Guide sections added
+
+#### Phase 5: RevenueCat Content Pipeline
+- [x] C1: auto-queue-config.example.json — 3 RevenueCat tutorial job templates added
+- [x] C2: application-letter.md — updated with Prometheus endpoint, batch API, webhook system, RevenueCat MCP integration; test count updated to 173
+
+### Notes
+- CI concurrency group added to prevent duplicate runs
+- timeout-minutes: 15 on all three CI jobs
+- `Path.replace()` used instead of `Path.rename()` for Windows compatibility in webhooks
+- 173 tests pass, 83% coverage (target: 75%)

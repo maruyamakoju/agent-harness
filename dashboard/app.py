@@ -5,6 +5,7 @@ Serves at http://localhost:7860
 
 import hmac
 import json
+import logging
 import os
 import re
 import shutil
@@ -51,6 +52,7 @@ NOTIFICATIONS_LOG = LOGS_DIR / "notifications.log"
 
 CONFIG_DIR = HARNESS / "config"
 AUTOQUEUE_CONFIG = CONFIG_DIR / "auto-queue-config.json"
+WEBHOOKS_CONFIG = CONFIG_DIR / "webhooks.json"
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
 DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "claude-sonnet-4-6")
 MAX_PENDING_JOBS = int(os.environ.get("MAX_PENDING_JOBS", "0"))  # 0 = unlimited
@@ -80,10 +82,27 @@ _PR_GITHUB_RE = re.compile(r'github\.com/([^/]+)/([^/\s"\']+)/pull/(\d+)')
 # ---------------------------------------------------------------------------
 # Performance caches
 # ---------------------------------------------------------------------------
-# Duration cache: keyed by job_id; persists forever for done/failed jobs
+# Maximum number of entries for per-job caches (prevents unbounded growth)
+_CACHE_MAX = 1000
+
+
+def _cache_set(cache: dict, key: str, value) -> None:
+    """Insert into cache dict, evicting the oldest entry when at capacity (FIFO-LRU)."""
+    if key in cache:
+        cache[key] = value
+        return
+    if len(cache) >= _CACHE_MAX:
+        try:
+            del cache[next(iter(cache))]
+        except StopIteration:
+            pass
+    cache[key] = value
+
+
+# Duration cache: keyed by job_id; persists for done/failed jobs (bounded)
 _duration_cache: dict[str, int | None] = {}
 
-# Per-job cost cache: keyed by job_id; persists forever for done/failed jobs
+# Per-job cost cache: keyed by job_id; persists for done/failed jobs (bounded)
 _cost_per_job_cache: dict[str, float | None] = {}
 
 # Costs cache: TTL-based to avoid full-scan on every request
@@ -93,6 +112,14 @@ _COSTS_TTL = 60.0  # seconds
 # Metrics cache: aggregated success/cost/duration stats
 _metrics_cache: dict = {"data": None, "ts": 0.0}
 _METRICS_TTL = 120.0  # seconds
+
+# Activity cache: short-lived to avoid N+1 on fast-polling UIs
+_activity_cache: dict = {"data": None, "ts": 0.0}
+_ACTIVITY_TTL = 10.0  # seconds
+
+# Prometheus metrics cache (text format)
+_prom_cache: dict = {"data": None, "ts": 0.0}
+_PROM_TTL = 15.0  # seconds
 
 # Log endpoint: refuse to load more than this many bytes into memory at once
 MAX_LOG_BYTES = 5 * 1024 * 1024  # 5 MB
@@ -120,6 +147,37 @@ def _record_login_attempt(ip: str) -> None:
     attempts = [t for t in _login_attempts.get(ip, []) if now - t < _RATE_LIMIT_WINDOW]
     attempts.append(now)
     _login_attempts[ip] = attempts
+
+
+# ===== Request Logging Middleware ===========================================
+
+_req_logger = logging.getLogger("dashboard.requests")
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(message)s',
+)
+
+
+@app.before_request
+def _log_request_start():
+    request._start_ts = time.time()  # type: ignore[attr-defined]
+
+
+@app.after_request
+def _log_request_end(response):
+    try:
+        elapsed = round((time.time() - getattr(request, "_start_ts", time.time())) * 1000, 1)
+        _req_logger.info(json.dumps({
+            "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "method": request.method,
+            "path": request.path,
+            "status": response.status_code,
+            "elapsed_ms": elapsed,
+            "ip": request.remote_addr,
+        }))
+    except Exception:
+        pass
+    return response
 
 
 # ===== Security Middleware ==================================================
@@ -288,14 +346,14 @@ def _get_job_duration(job_id: str) -> dict:
 
 
 def _get_cached_duration(job_id: str, status: str) -> int | None:
-    """Return job duration, using an in-memory cache for completed jobs."""
+    """Return job duration, using a bounded in-memory cache for completed jobs."""
     if status == "pending":
         return None
     if status in ("done", "failed") and job_id in _duration_cache:
         return _duration_cache[job_id]
     dur = _get_job_duration(job_id)["duration_sec"]
     if status in ("done", "failed"):
-        _duration_cache[job_id] = dur  # cache permanently for finished jobs
+        _cache_set(_duration_cache, job_id, dur)
     return dur
 
 
@@ -310,15 +368,33 @@ def _get_job_cost(job_id: str) -> float | None:
 
 
 def _get_cached_cost(job_id: str, status: str) -> float | None:
-    """Return job cost, using an in-memory cache for completed jobs."""
+    """Return job cost, using a bounded in-memory cache for completed jobs."""
     if status == "pending":
         return None
     if status in ("done", "failed") and job_id in _cost_per_job_cache:
         return _cost_per_job_cache[job_id]
     cost = _get_job_cost(job_id)
     if status in ("done", "failed"):
-        _cost_per_job_cache[job_id] = cost  # cache permanently for finished jobs
+        _cache_set(_cost_per_job_cache, job_id, cost)
     return cost
+
+
+# ===== API Response Helpers =================================================
+
+def _api_response(data, status_code: int = 200):
+    """Wrap data in a standard envelope: {"success": true, "data": ..., "ts": ...}.
+
+    Callers that need the old flat format can request ?format=legacy on any endpoint
+    that explicitly supports it. New endpoints should use this wrapper.
+    """
+    if request.args.get("format") == "legacy":
+        return jsonify(data), status_code
+    envelope = {
+        "success": status_code < 400,
+        "data": data,
+        "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    return jsonify(envelope), status_code
 
 
 # ===== Job Data Access ======================================================
@@ -534,6 +610,75 @@ def api_create_job():
     return jsonify(job), 201
 
 
+@app.route("/api/jobs/batch", methods=["POST"])
+@require_auth
+def api_create_jobs_batch():
+    """Create up to 50 jobs atomically in a single request.
+
+    Request body: {"jobs": [{"repo": "...", "task": "...", ...}, ...]}
+    Returns: {"created": [...], "errors": [...]}
+    """
+    body = request.get_json(force=True) or {}
+    job_specs = body.get("jobs", [])
+    if not isinstance(job_specs, list) or not job_specs:
+        abort(400, description="'jobs' must be a non-empty array")
+    if len(job_specs) > 50:
+        abort(400, description="Batch size limit is 50 jobs per request")
+
+    # Pending queue depth limit (0 = unlimited)
+    if MAX_PENDING_JOBS > 0:
+        pending_count = len(list(PENDING.glob("*.json"))) if PENDING.is_dir() else 0
+        remaining = MAX_PENDING_JOBS - pending_count
+        if remaining <= 0:
+            abort(429, description=f"Pending queue is full ({pending_count}/{MAX_PENDING_JOBS})")
+        job_specs = job_specs[:remaining]  # trim to available slots
+
+    created = []
+    errors = []
+
+    for i, spec in enumerate(job_specs):
+        if not isinstance(spec, dict):
+            errors.append({"index": i, "error": "job spec must be an object"})
+            continue
+        repo = spec.get("repo", "").strip()
+        task = spec.get("task", "").strip()
+        if not repo or not task:
+            errors.append({"index": i, "error": "'repo' and 'task' are required", "spec": spec})
+            continue
+
+        setup_cmds = spec.get("setup", [])
+        test_cmds = spec.get("test", [])
+        if isinstance(setup_cmds, str):
+            setup_cmds = [c.strip() for c in setup_cmds.split("\n") if c.strip()]
+        if isinstance(test_cmds, str):
+            test_cmds = [c.strip() for c in test_cmds.split("\n") if c.strip()]
+
+        try:
+            job_id = _generate_job_id(task)
+            priority = max(1, min(5, int(spec.get("priority", 3))))
+            job = {
+                "id": job_id,
+                "repo": repo,
+                "base_ref": spec.get("base_ref", "main"),
+                "work_branch": f"agent/{job_id}",
+                "task": task,
+                "commands": {"setup": setup_cmds, "test": test_cmds},
+                "time_budget_sec": int(spec.get("time_budget", 3600)),
+                "max_retries": int(spec.get("max_retries", 2)),
+                "gpu_required": bool(spec.get("gpu_required", False)),
+                "priority": priority,
+                "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "batch_index": i,
+            }
+            _write_pending_job(job)
+            created.append(job)
+        except Exception as e:
+            errors.append({"index": i, "error": str(e)[:200], "spec": spec})
+
+    status_code = 201 if created else 400
+    return jsonify({"created": created, "errors": errors, "total_created": len(created)}), status_code
+
+
 @app.route("/api/jobs/<job_id>", methods=["DELETE"])
 @require_auth
 def api_delete_job(job_id: str):
@@ -625,9 +770,18 @@ def api_rerun_job(job_id: str):
 @app.route("/api/activity")
 @require_auth
 def api_activity():
-    """Return recent activity events across all jobs (server-side aggregation)."""
+    """Return recent activity events across all jobs (server-side aggregation).
+
+    Results are cached for _ACTIVITY_TTL seconds to avoid repeated file I/O
+    on fast-polling UIs (e.g., dashboard refreshing every 5 seconds).
+    """
     limit = request.args.get("limit", 15, type=int)
     limit = min(limit, 100)
+
+    now = time.time()
+    cached = _activity_cache.get("data")
+    if cached is not None and (now - _activity_cache.get("ts", 0.0)) < _ACTIVITY_TTL:
+        return jsonify(cached[:limit])
 
     jobs = _list_jobs()
     items = []
@@ -637,6 +791,8 @@ def api_activity():
             items.append(ev)
 
     items.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+    _activity_cache["data"] = items
+    _activity_cache["ts"] = now
     return jsonify(items[:limit])
 
 
@@ -1080,6 +1236,93 @@ def api_metrics():
     return jsonify(result)
 
 
+# ===== Prometheus Metrics (/metrics) ========================================
+
+@app.route("/metrics")
+@require_auth
+def prometheus_metrics():
+    """Expose agent metrics in Prometheus text exposition format (text/plain; version=0.0.4).
+
+    Designed to be scraped by Prometheus or Grafana Agent.
+    Results are cached for _PROM_TTL seconds to avoid hammering disk on every scrape.
+    """
+    now = time.time()
+    if _prom_cache["data"] is not None and (now - _prom_cache["ts"]) < _PROM_TTL:
+        return Response(_prom_cache["data"], mimetype="text/plain; version=0.0.4")
+
+    # Collect counts
+    counts: dict[str, int] = {}
+    for s, d in STATUS_DIRS.items():
+        counts[s] = len(list(d.glob("*.json"))) if d.is_dir() else 0
+
+    # Collect cost + latency from metrics cache (reuse existing computation)
+    metrics_data = _metrics_cache.get("data") or {}
+    total_cost = 0.0
+    for day_entry in metrics_data.get("cost_by_day", []):
+        total_cost += day_entry.get("cost_usd", 0.0)
+
+    avg_dur = (metrics_data.get("avg_duration_sec") or {}).get("all")
+    success_rate_all = (metrics_data.get("success_rate") or {}).get("all", {})
+    total_jobs = success_rate_all.get("total", 0)
+    done_jobs = success_rate_all.get("done", 0)
+    failed_jobs = success_rate_all.get("failed", 0)
+
+    # Collect per-endpoint latency from recent request log (approximation)
+    # We track just the job counts per status for now; latency would need middleware instrumentation
+    lines = [
+        "# HELP agent_jobs_total Total number of jobs by status",
+        "# TYPE agent_jobs_total gauge",
+        f'agent_jobs_total{{status="pending"}} {counts.get("pending", 0)}',
+        f'agent_jobs_total{{status="running"}} {counts.get("running", 0)}',
+        f'agent_jobs_total{{status="done"}} {counts.get("done", 0)}',
+        f'agent_jobs_total{{status="failed"}} {counts.get("failed", 0)}',
+        "",
+        "# HELP agent_cost_total Total API cost in USD (from job logs)",
+        "# TYPE agent_cost_total gauge",
+        f"agent_cost_total {round(total_cost, 4)}",
+        "",
+        "# HELP agent_jobs_success_total Total completed (done) jobs across all time",
+        "# TYPE agent_jobs_success_total counter",
+        f"agent_jobs_success_total {done_jobs}",
+        "",
+        "# HELP agent_jobs_failed_total Total failed jobs across all time",
+        "# TYPE agent_jobs_failed_total counter",
+        f"agent_jobs_failed_total {failed_jobs}",
+        "",
+    ]
+
+    if avg_dur is not None:
+        lines += [
+            "# HELP agent_job_duration_avg_seconds Average job duration in seconds (all time)",
+            "# TYPE agent_job_duration_avg_seconds gauge",
+            f"agent_job_duration_avg_seconds {avg_dur}",
+            "",
+        ]
+
+    # Agent liveness
+    heartbeat = _read_json(HEARTBEAT_FILE) or {}
+    hb_ts_str = heartbeat.get("timestamp", "")
+    agent_alive = 0
+    try:
+        hb_ts = datetime.fromisoformat(hb_ts_str.replace("Z", "+00:00"))
+        age = (datetime.now(timezone.utc) - hb_ts).total_seconds()
+        agent_alive = 1 if age < 120 else 0
+    except (ValueError, AttributeError):
+        pass
+
+    lines += [
+        "# HELP agent_alive Agent heartbeat liveness (1=alive, 0=dead)",
+        "# TYPE agent_alive gauge",
+        f"agent_alive {agent_alive}",
+        "",
+    ]
+
+    body = "\n".join(lines) + "\n"
+    _prom_cache["data"] = body
+    _prom_cache["ts"] = now
+    return Response(body, mimetype="text/plain; version=0.0.4")
+
+
 # ===== API: Detailed Health =================================================
 
 @app.route("/api/health/detailed")
@@ -1242,6 +1485,21 @@ def api_merge_pr(job_id: str):
         abort(502, description=f"GitHub API error: {str(e)[:100]}")
 
 
+# ===== Notification helpers =================================================
+
+def _send_channel_notification(channel_type: str, url: str, payload: dict, timeout: int = 5) -> str:
+    """Send a notification to a single channel. Returns 'ok' or an error string."""
+    try:
+        data = json.dumps(payload).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout):
+            return "ok"
+    except urllib.error.HTTPError as e:
+        return f"http_{e.code}"
+    except Exception as e:
+        return f"error: {str(e)[:100]}"
+
+
 # ===== Notification test ====================================================
 
 @app.route("/api/notify/test", methods=["POST"])
@@ -1251,58 +1509,171 @@ def api_notify_test():
     msg = "🧪 [Agent Dashboard] 通知テスト - システムは正常です"
     results: dict[str, str] = {}
 
-    # Telegram
     if _TELEGRAM_BOT_TOKEN and _TELEGRAM_CHAT_ID:
-        try:
-            url = f"https://api.telegram.org/bot{_TELEGRAM_BOT_TOKEN}/sendMessage"
-            payload = json.dumps({"chat_id": _TELEGRAM_CHAT_ID, "text": msg}).encode()
-            req = urllib.request.Request(
-                url, data=payload, headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req, timeout=5):
-                results["telegram"] = "ok"
-        except urllib.error.HTTPError as e:
-            results["telegram"] = f"http_{e.code}"
-        except Exception as e:
-            results["telegram"] = f"error: {str(e)[:100]}"
+        url = f"https://api.telegram.org/bot{_TELEGRAM_BOT_TOKEN}/sendMessage"
+        results["telegram"] = _send_channel_notification(
+            "telegram", url, {"chat_id": _TELEGRAM_CHAT_ID, "text": msg}
+        )
     else:
         results["telegram"] = "not_configured"
 
-    # Discord
     if _DISCORD_WEBHOOK_URL:
-        try:
-            payload = json.dumps({"content": msg}).encode()
-            req = urllib.request.Request(
-                _DISCORD_WEBHOOK_URL, data=payload,
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req, timeout=5):
-                results["discord"] = "ok"
-        except urllib.error.HTTPError as e:
-            results["discord"] = f"http_{e.code}"
-        except Exception as e:
-            results["discord"] = f"error: {str(e)[:100]}"
+        results["discord"] = _send_channel_notification(
+            "discord", _DISCORD_WEBHOOK_URL, {"content": msg}
+        )
     else:
         results["discord"] = "not_configured"
 
-    # Generic webhook
     if _WEBHOOK_URL:
-        try:
-            payload = json.dumps({"text": msg}).encode()
-            req = urllib.request.Request(
-                _WEBHOOK_URL, data=payload,
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req, timeout=5):
-                results["webhook"] = "ok"
-        except urllib.error.HTTPError as e:
-            results["webhook"] = f"http_{e.code}"
-        except Exception as e:
-            results["webhook"] = f"error: {str(e)[:100]}"
+        results["webhook"] = _send_channel_notification(
+            "webhook", _WEBHOOK_URL, {"text": msg}
+        )
     else:
         results["webhook"] = "not_configured"
 
     return jsonify(results)
+
+
+# ===== Job Completion Webhooks ==============================================
+
+def _load_webhooks() -> list[dict]:
+    """Load webhook registrations from config/webhooks.json."""
+    if not WEBHOOKS_CONFIG.exists():
+        return []
+    try:
+        data = json.loads(WEBHOOKS_CONFIG.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return data
+    except Exception:
+        pass
+    return []
+
+
+def _save_webhooks(hooks: list[dict]) -> None:
+    """Persist webhook registrations atomically (works on Linux and Windows)."""
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = WEBHOOKS_CONFIG.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(hooks, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(WEBHOOKS_CONFIG)  # atomic on POSIX; replace() works on Windows too
+
+
+@app.route("/api/webhooks", methods=["GET"])
+@require_auth
+def api_webhooks_list():
+    """List all registered job-completion webhooks."""
+    hooks = _load_webhooks()
+    # Mask secret if present
+    safe = [
+        {k: ("***" if k == "secret" and v else v) for k, v in h.items()}
+        for h in hooks
+    ]
+    return jsonify(safe)
+
+
+@app.route("/api/webhooks", methods=["POST"])
+@require_auth
+def api_webhooks_register():
+    """Register a new job-completion webhook.
+
+    Body: {"url": "https://...", "events": ["job_done", "job_failed"], "secret": "opt"}
+    The 'events' field defaults to ["job_done", "job_failed"] if omitted.
+    """
+    body = request.get_json(force=True) or {}
+    url = body.get("url", "").strip()
+    if not url or not url.startswith("https://"):
+        abort(400, description="'url' is required and must start with https://")
+    events = body.get("events", ["job_done", "job_failed"])
+    if not isinstance(events, list):
+        abort(400, description="'events' must be an array")
+    valid_events = {"job_done", "job_failed", "job_start"}
+    for ev in events:
+        if ev not in valid_events:
+            abort(400, description=f"Invalid event '{ev}'. Valid: {sorted(valid_events)}")
+    hook = {
+        "id": uuid.uuid4().hex[:12],
+        "url": url,
+        "events": events,
+        "secret": body.get("secret", ""),
+        "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    hooks = _load_webhooks()
+    if len(hooks) >= 20:
+        abort(400, description="Webhook limit is 20 registrations")
+    hooks.append(hook)
+    _save_webhooks(hooks)
+    safe = {k: ("***" if k == "secret" and v else v) for k, v in hook.items()}
+    return jsonify(safe), 201
+
+
+@app.route("/api/webhooks/<hook_id>", methods=["DELETE"])
+@require_auth
+def api_webhooks_delete(hook_id: str):
+    """Remove a registered webhook by ID."""
+    hook_id = re.sub(r'[^a-z0-9]', '', hook_id)
+    hooks = _load_webhooks()
+    new_hooks = [h for h in hooks if h.get("id") != hook_id]
+    if len(new_hooks) == len(hooks):
+        abort(404, description="Webhook not found")
+    _save_webhooks(new_hooks)
+    return jsonify({"deleted": hook_id})
+
+
+# ===== API: v1 Blueprint (aliases to existing routes) =======================
+
+from flask import Blueprint  # noqa: E402 — placed here to avoid circular import concerns
+
+api_v1 = Blueprint("api_v1", __name__, url_prefix="/api/v1")
+
+
+@api_v1.route("/jobs", methods=["GET"])
+@require_auth
+def v1_jobs():
+    return api_jobs()
+
+
+@api_v1.route("/jobs", methods=["POST"])
+@require_auth
+def v1_create_job():
+    return api_create_job()
+
+
+@api_v1.route("/jobs/batch", methods=["POST"])
+@require_auth
+def v1_batch_jobs():
+    return api_create_jobs_batch()
+
+
+@api_v1.route("/jobs/<job_id>", methods=["GET"])
+@require_auth
+def v1_job_detail(job_id: str):
+    return api_job_detail(job_id)
+
+
+@api_v1.route("/jobs/<job_id>/cancel", methods=["POST"])
+@require_auth
+def v1_cancel_job(job_id: str):
+    return api_cancel_job(job_id)
+
+
+@api_v1.route("/status", methods=["GET"])
+@require_auth
+def v1_status():
+    return api_status()
+
+
+@api_v1.route("/metrics", methods=["GET"])
+@require_auth
+def v1_metrics():
+    return api_metrics()
+
+
+@api_v1.route("/health", methods=["GET"])
+@require_auth
+def v1_health():
+    return api_health_detailed()
+
+
+app.register_blueprint(api_v1)
 
 
 # ===== Error handlers =======================================================

@@ -71,45 +71,71 @@ process_new_issues() {
 
             log "New agent issue: $issue_key - $title"
 
-            # Parse structured fields from body
+            # Parse structured fields from body using awk for robust handling of
+            # values containing ':' (e.g. URLs, docker image:tag, timestamps)
             local target_repo="https://github.com/${repo}.git"
             local setup_cmd="" test_cmd="" time_budget="1200" base_ref="main"
 
+            # _extract_field KEY BODY: returns the value after "KEY: " on the first
+            # matching line (case-insensitive), stripping backticks and leading/
+            # trailing whitespace. Uses awk so that colons in values are preserved.
+            _extract_field() {
+                local key="$1"
+                local text="$2"
+                echo "$text" | awk -v key="$key" '
+                    BEGIN { IGNORECASE=1 }
+                    /^[[:space:]]*/ {
+                        line = $0
+                        # strip leading whitespace
+                        sub(/^[[:space:]]+/, "", line)
+                        # check if line starts with key:
+                        k = tolower(key) ":"
+                        lline = tolower(line)
+                        if (index(lline, k) == 1) {
+                            # extract everything after "key:"
+                            val = substr(line, length(key)+2)
+                            # strip leading whitespace
+                            sub(/^[[:space:]]+/, "", val)
+                            # strip backticks
+                            gsub(/`/, "", val)
+                            # strip trailing whitespace
+                            sub(/[[:space:]]+$/, "", val)
+                            print val
+                            exit
+                        }
+                    }
+                ' 2>/dev/null || true
+            }
+
             # Extract repo: field
-            if echo "$body" | grep -qiE '^repo:'; then
-                local parsed_repo
-                parsed_repo=$(echo "$body" | grep -iE '^repo:' | head -1 | sed 's/^repo:\s*//i' | tr -d '`' | xargs)
-                [[ -n "$parsed_repo" ]] && target_repo="$parsed_repo"
-            fi
+            local parsed_repo
+            parsed_repo=$(_extract_field "repo" "$body")
+            [[ -n "$parsed_repo" ]] && target_repo="$parsed_repo"
 
             # Extract setup: field
-            if echo "$body" | grep -qiE '^setup:'; then
-                setup_cmd=$(echo "$body" | grep -iE '^setup:' | head -1 | sed 's/^setup:\s*//i' | tr -d '`' | xargs)
-            fi
+            setup_cmd=$(_extract_field "setup" "$body")
 
             # Extract test: field
-            if echo "$body" | grep -qiE '^test:'; then
-                test_cmd=$(echo "$body" | grep -iE '^test:' | head -1 | sed 's/^test:\s*//i' | tr -d '`' | xargs)
-            fi
+            test_cmd=$(_extract_field "test" "$body")
 
-            # Extract time-budget: field
-            if echo "$body" | grep -qiE '^time-budget:'; then
-                time_budget=$(echo "$body" | grep -iE '^time-budget:' | head -1 | sed 's/^time-budget:\s*//i' | tr -d '`' | xargs)
+            # Extract time-budget: field (numeric only)
+            local raw_budget
+            raw_budget=$(_extract_field "time-budget" "$body")
+            if echo "$raw_budget" | grep -qE '^[0-9]+$'; then
+                time_budget="$raw_budget"
             fi
 
             # Extract base: field
-            if echo "$body" | grep -qiE '^base:'; then
-                base_ref=$(echo "$body" | grep -iE '^base:' | head -1 | sed 's/^base:\s*//i' | tr -d '`' | xargs)
-            fi
+            local raw_base
+            raw_base=$(_extract_field "base" "$body")
+            [[ -n "$raw_base" ]] && base_ref="$raw_base"
 
             # Extract priority: field (1-5, default 3)
             local priority=3
-            if echo "$body" | grep -qiE '^priority:'; then
-                local raw_prio
-                raw_prio=$(echo "$body" | grep -iE '^priority:' | head -1 | sed 's/^priority:\s*//i' | tr -d '`' | xargs)
-                if echo "$raw_prio" | grep -qE '^[1-5]$'; then
-                    priority="$raw_prio"
-                fi
+            local raw_prio
+            raw_prio=$(_extract_field "priority" "$body")
+            if echo "$raw_prio" | grep -qE '^[1-5]$'; then
+                priority="$raw_prio"
             fi
 
             # Build task from title + remaining body text

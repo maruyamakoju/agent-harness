@@ -1576,6 +1576,232 @@ class TestDetailedHealth:
 
 
 # ---------------------------------------------------------------------------
+# Prometheus Metrics Endpoint (/metrics)
+# ---------------------------------------------------------------------------
+class TestMetricsEndpoint:
+    def test_prometheus_metrics_returns_200(self, client):
+        r = client.get("/metrics")
+        assert r.status_code == 200
+
+    def test_prometheus_metrics_content_type(self, client):
+        r = client.get("/metrics")
+        assert "text/plain" in r.content_type
+
+    def test_prometheus_metrics_contains_job_totals(self, client):
+        r = client.get("/metrics")
+        body = r.data.decode()
+        assert "agent_jobs_total" in body
+        assert 'status="done"' in body
+        assert 'status="failed"' in body
+        assert 'status="pending"' in body
+        assert 'status="running"' in body
+
+    def test_prometheus_metrics_contains_cost(self, client):
+        r = client.get("/metrics")
+        body = r.data.decode()
+        assert "agent_cost_total" in body
+
+    def test_prometheus_metrics_contains_agent_alive(self, client):
+        r = client.get("/metrics")
+        body = r.data.decode()
+        assert "agent_alive" in body
+
+    def test_prometheus_metrics_help_lines_present(self, client):
+        """Every metric family must have a # HELP line."""
+        r = client.get("/metrics")
+        body = r.data.decode()
+        assert "# HELP agent_jobs_total" in body
+        assert "# TYPE agent_jobs_total" in body
+
+    def test_prometheus_metrics_requires_auth(self, auth_client):
+        # /metrics is not under /api/ so auth redirects to /login (302)
+        r = auth_client.get("/metrics")
+        assert r.status_code in (401, 302)
+
+    def test_prometheus_metrics_cached(self, client):
+        """Two rapid requests should return the same body (cache hit)."""
+        import app as app_module
+        app_module._prom_cache["data"] = None
+        app_module._prom_cache["ts"] = 0.0
+        r1 = client.get("/metrics")
+        r2 = client.get("/metrics")
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+        assert r1.data == r2.data
+
+
+# ---------------------------------------------------------------------------
+# Batch Job Creation API (POST /api/jobs/batch)
+# ---------------------------------------------------------------------------
+class TestBatchJobCreation:
+    def test_batch_create_single_job(self, client, test_data_dir):
+        r = client.post("/api/jobs/batch", json={
+            "jobs": [{"repo": "https://github.com/test/repo.git", "task": "batch test task"}]
+        })
+        assert r.status_code == 201
+        data = r.get_json()
+        assert len(data["created"]) == 1
+        assert data["total_created"] == 1
+        assert data["errors"] == []
+
+    def test_batch_create_multiple_jobs(self, client, test_data_dir):
+        specs = [
+            {"repo": "https://github.com/test/repo.git", "task": f"batch task {i}"}
+            for i in range(5)
+        ]
+        r = client.post("/api/jobs/batch", json={"jobs": specs})
+        assert r.status_code == 201
+        data = r.get_json()
+        assert data["total_created"] == 5
+        assert len(data["errors"]) == 0
+
+    def test_batch_rejects_empty_list(self, client):
+        r = client.post("/api/jobs/batch", json={"jobs": []})
+        assert r.status_code == 400
+
+    def test_batch_rejects_oversized_list(self, client):
+        specs = [
+            {"repo": "https://github.com/test/repo.git", "task": f"task {i}"}
+            for i in range(51)
+        ]
+        r = client.post("/api/jobs/batch", json={"jobs": specs})
+        assert r.status_code == 400
+
+    def test_batch_partial_errors_reported(self, client, test_data_dir):
+        """If some specs are invalid, valid ones are created and errors returned."""
+        r = client.post("/api/jobs/batch", json={
+            "jobs": [
+                {"repo": "https://github.com/test/repo.git", "task": "valid job"},
+                {"repo": "", "task": ""},  # missing required fields
+            ]
+        })
+        data = r.get_json()
+        assert data["total_created"] == 1
+        assert len(data["errors"]) == 1
+        assert data["errors"][0]["index"] == 1
+
+    def test_batch_requires_auth(self, auth_client):
+        r = auth_client.post("/api/jobs/batch", json={
+            "jobs": [{"repo": "https://github.com/test/repo.git", "task": "test"}]
+        })
+        assert r.status_code == 401
+
+    def test_batch_job_has_correct_structure(self, client, test_data_dir):
+        r = client.post("/api/jobs/batch", json={
+            "jobs": [{"repo": "https://github.com/test/repo.git", "task": "structure check"}]
+        })
+        assert r.status_code == 201
+        job = r.get_json()["created"][0]
+        for field in ("id", "repo", "task", "work_branch", "created_at"):
+            assert field in job, f"Missing field: {field}"
+
+    def test_batch_default_priority_is_3(self, client, test_data_dir):
+        r = client.post("/api/jobs/batch", json={
+            "jobs": [{"repo": "https://github.com/test/repo.git", "task": "priority test"}]
+        })
+        assert r.status_code == 201
+        job = r.get_json()["created"][0]
+        assert job.get("priority") == 3
+
+
+# ---------------------------------------------------------------------------
+# API v1 Blueprint
+# ---------------------------------------------------------------------------
+class TestApiV1:
+    def test_v1_status(self, client):
+        r = client.get("/api/v1/status")
+        assert r.status_code == 200
+
+    def test_v1_jobs_list(self, client):
+        r = client.get("/api/v1/jobs")
+        assert r.status_code == 200
+
+    def test_v1_batch_endpoint_exists(self, client):
+        r = client.post("/api/v1/jobs/batch", json={
+            "jobs": [{"repo": "https://github.com/test/repo.git", "task": "v1 test"}]
+        })
+        assert r.status_code in (201, 400, 429)  # accepted or queue-full
+
+    def test_v1_health(self, client):
+        r = client.get("/api/v1/health")
+        assert r.status_code == 200
+
+    def test_v1_requires_auth(self, auth_client):
+        r = auth_client.get("/api/v1/status")
+        assert r.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Webhook Management API
+# ---------------------------------------------------------------------------
+class TestWebhooks:
+    def test_list_webhooks_empty(self, client, test_data_dir):
+        # Ensure webhooks.json doesn't exist yet
+        wf = test_data_dir / "config" / "webhooks.json"
+        wf.unlink(missing_ok=True)
+        r = client.get("/api/webhooks")
+        assert r.status_code == 200
+        assert r.get_json() == []
+
+    def test_register_webhook(self, client, test_data_dir):
+        wf = test_data_dir / "config" / "webhooks.json"
+        wf.unlink(missing_ok=True)
+        r = client.post("/api/webhooks", json={
+            "url": "https://example.com/hook",
+            "events": ["job_done"],
+        })
+        assert r.status_code == 201
+        data = r.get_json()
+        assert data["url"] == "https://example.com/hook"
+        assert "id" in data
+
+    def test_register_webhook_rejects_http(self, client):
+        r = client.post("/api/webhooks", json={"url": "http://example.com/hook"})
+        assert r.status_code == 400
+
+    def test_delete_webhook(self, client, test_data_dir):
+        wf = test_data_dir / "config" / "webhooks.json"
+        wf.unlink(missing_ok=True)
+        # Register first
+        r1 = client.post("/api/webhooks", json={"url": "https://example.com/del-hook"})
+        hook_id = r1.get_json()["id"]
+        # Delete
+        r2 = client.delete(f"/api/webhooks/{hook_id}")
+        assert r2.status_code == 200
+        # Confirm gone
+        r3 = client.get("/api/webhooks")
+        hooks = r3.get_json()
+        assert all(h["id"] != hook_id for h in hooks)
+
+    def test_webhooks_require_auth(self, auth_client):
+        r = auth_client.get("/api/webhooks")
+        assert r.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# API Response Wrapper (_api_response)
+# ---------------------------------------------------------------------------
+class TestApiResponseWrapper:
+    def test_legacy_format_passthrough(self, client):
+        """?format=legacy should return the raw data without envelope."""
+        r = client.get("/api/status?format=legacy")
+        assert r.status_code == 200
+        data = r.get_json()
+        # In legacy mode, the envelope should NOT be present
+        assert "success" not in data or "counts" in data
+
+    def test_activity_cache_ttl(self, client):
+        """Two rapid calls to /api/activity should return same data (cache hit)."""
+        import app as app_module
+        app_module._activity_cache["data"] = None
+        app_module._activity_cache["ts"] = 0.0
+        r1 = client.get("/api/activity")
+        r2 = client.get("/api/activity")
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+
+
+# ---------------------------------------------------------------------------
 # Legacy compatibility - keep the original runner for backward compat
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":

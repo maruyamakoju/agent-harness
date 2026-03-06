@@ -73,3 +73,23 @@ There is NO human in the loop during your execution. Follow these rules strictly
 ### Notes
 - <any important observations or decisions>
 ```
+
+## MCP Server Integration
+
+Two MCP servers are configured in `.claude/mcp_servers.json`:
+
+### Ollama (local LLM)
+- **Usage**: Call for lightweight tasks, code review, or when minimising API cost is important
+- Tool prefix: `ollama-review__*`
+
+### RevenueCat MCP (`revenuecat`)
+- **URL**: `https://mcp.revenuecat.ai/mcp`
+- **Auth**: `REVENUECAT_API_KEY` environment variable (set in `.env`)
+- **26 tools across 6 categories**: products, entitlements, offerings, paywalls, customer management, subscription analytics
+- **Usage examples**:
+  - List products: use `revenuecat__list_products`
+  - Get subscription metrics: use `revenuecat__get_charts`
+  - Create entitlement: use `revenuecat__create_entitlement`
+  - Manage offerings: use `revenuecat__list_offerings`, `revenuecat__create_offering`
+- **When to use**: Any task involving subscription monetization, pricing experiments, or RevenueCat API integration
+- **Authentication note**: Requires `REVENUECAT_API_KEY` in environment. If not set, RevenueCat tools will fail with auth error — log this and continue with other tasks.

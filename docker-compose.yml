@@ -76,6 +76,13 @@ services:
     tmpfs:
       - /tmp:size=2G
 
+    # Log rotation (prevent unbounded disk growth)
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+
     # Health check
     healthcheck:
       test: ["CMD", "bash", "-c", "test -f /harness/logs/heartbeat.json && test $$(( $$(date +%s) - $$(date -r /harness/logs/heartbeat.json +%s) )) -lt 300"]
@@ -93,6 +100,11 @@ services:
     build: ./dashboard
     container_name: agent-dashboard
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     ports:
       - "7860:7860"
     environment:

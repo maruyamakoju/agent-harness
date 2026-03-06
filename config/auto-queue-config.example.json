@@ -19,6 +19,33 @@
       "priority": 3,
       "enabled": false,
       "queued": false
+    },
+    {
+      "id": "revenuecat-mcp-tutorial",
+      "repo": "https://github.com/your-org/your-repo.git",
+      "task": "Write a technical tutorial: 'How to integrate RevenueCat with an AI agent via MCP'. Cover: (1) setting up REVENUECAT_API_KEY, (2) using the 26 RevenueCat MCP tools to create products/entitlements/offerings, (3) a complete example of an agent that reads subscription analytics and adjusts pricing. Include working code samples in Python and shell.",
+      "time_budget_sec": 3600,
+      "priority": 3,
+      "enabled": false,
+      "queued": false
+    },
+    {
+      "id": "revenuecat-charts-optimizer",
+      "repo": "https://github.com/your-org/your-repo.git",
+      "task": "Write a blog post: 'Using RevenueCat Charts API to optimize subscription pricing'. Demonstrate how an agent can: (1) fetch cohort retention data via Charts API, (2) identify underperforming price points, (3) programmatically create A/B test offerings via MCP, (4) measure results. Include Python code using the RevenueCat REST API and real-world pricing strategy guidance.",
+      "time_budget_sec": 3600,
+      "priority": 3,
+      "enabled": false,
+      "queued": false
+    },
+    {
+      "id": "revenuecat-virtual-currencies",
+      "repo": "https://github.com/your-org/your-repo.git",
+      "task": "Write a technical guide: 'Building agent-first monetization with RevenueCat virtual currencies'. Cover: (1) when to use virtual currencies vs. subscriptions vs. one-time purchases, (2) implementing credit/token systems via RevenueCat, (3) using MCP tools to manage virtual currency entitlements, (4) AI agent cost accounting using credits. Includes example architecture for an AI app with variable API costs.",
+      "time_budget_sec": 3600,
+      "priority": 3,
+      "enabled": false,
+      "queued": false
     }
   ]
 }

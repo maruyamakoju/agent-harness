@@ -7,5 +7,13 @@
       "host.docker.internal:11434"
     ],
     "description": "Local LLM via Ollama for code review and lightweight tasks"
+  },
+  "revenuecat": {
+    "type": "http",
+    "url": "https://mcp.revenuecat.ai/mcp",
+    "headers": {
+      "Authorization": "Bearer ${REVENUECAT_API_KEY}"
+    },
+    "description": "RevenueCat MCP server — 26 tools for products, entitlements, offerings, paywalls, customer management, and subscription analytics"
   }
 }

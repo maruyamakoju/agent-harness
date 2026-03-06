@@ -9,7 +9,7 @@
 #
 # JSON input format: {"tool_name": "Bash", "tool_input": {"command": "..."}}
 # =============================================================================
-set -uo pipefail
+set -euo pipefail
 
 LOG_FILE="${HARNESS_DIR:-/harness}/logs/hook-blocks.jsonl"
 
@@ -64,7 +64,9 @@ block_command() {
 
 # === Filesystem Destruction ===
 echo "$COMMAND" | grep -qE 'rm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+)?/' && block_command "FS_DESTRUCTION" "rm -rf /"
-echo "$COMMAND" | grep -qE 'rm\s+-[a-zA-Z]*r[a-zA-Z]*f?\s+(/|\*|~|\$HOME|\$\{HOME\})' && block_command "FS_DESTRUCTION" "rm -rf critical_path"
+# Also catch rm -rf $HOME, rm --recursive --force $HOME, rm -rf ~, etc.
+echo "$COMMAND" | grep -qE 'rm\s+(-[a-zA-Z]*r[a-zA-Z]*f?[a-zA-Z]*|--recursive|--force)\s+(/|\*|~|\$HOME|\$\{HOME\}|"~"|"\$HOME")' && block_command "FS_DESTRUCTION" "rm -rf critical_path"
+echo "$COMMAND" | grep -qiE 'rm\s+(-[a-zA-Z]*|--(recursive|force|no-preserve-root)\s+)*\s*(--\s*)?(/|\$HOME|\$\{HOME\}|~)' && block_command "FS_DESTRUCTION" "rm critical path variant"
 echo "$COMMAND" | grep -qiE 'mkfs\.' && block_command "FS_DESTRUCTION" "mkfs"
 echo "$COMMAND" | grep -qiE 'dd\s+if=.*\s+of=/dev/' && block_command "FS_DESTRUCTION" "dd to device"
 echo "$COMMAND" | grep -qiE '(shred|wipefs)\s' && block_command "FS_DESTRUCTION" "disk wipe"
@@ -75,9 +77,12 @@ echo "$COMMAND" | grep -qiE 'curl\s.*\|\s*(ba)?sh' && block_command "REMOTE_CODE
 echo "$COMMAND" | grep -qiE 'wget\s.*\|\s*(ba)?sh' && block_command "REMOTE_CODE_EXEC" "wget pipe to shell"
 echo "$COMMAND" | grep -qiE 'curl\s.*\|\s*python' && block_command "REMOTE_CODE_EXEC" "curl pipe to python"
 echo "$COMMAND" | grep -qiE 'wget\s.*\|\s*python' && block_command "REMOTE_CODE_EXEC" "wget pipe to python"
+# Bypass: backtick/subshell RCE: sh `curl ...` or sh $(curl ...)
+echo "$COMMAND" | grep -qiE '(ba)?sh\s+[\`\$\(]' && block_command "REMOTE_CODE_EXEC" "shell subshell exec"
+echo "$COMMAND" | grep -qiE '(eval|exec)\s+[\`\$\(].*curl' && block_command "REMOTE_CODE_EXEC" "eval/exec curl subshell"
 echo "$COMMAND_LOWER" | grep -qE '(curl|wget).*-o\s*/tmp/.*&&.*(ba)?sh\s*/tmp/' && block_command "REMOTE_CODE_EXEC" "download and execute"
 # Bypass: download → chmod +x → execute directly (without explicit sh/bash)
-echo "$COMMAND_LOWER" | grep -qE '(curl|wget).*-o\s*/tmp/.*&&\s*chmod.*\+x.*&&\s*/tmp/' && block_command "REMOTE_CODE_EXEC" "download chmod exec"
+echo "$COMMAND_LOWER" | grep -qE '(curl|wget).*-o\s*/tmp/.*&&\s*chmod.*(\+x|[0-7]*[1357][0-7]{2}).*&&\s*/tmp/' && block_command "REMOTE_CODE_EXEC" "download chmod exec"
 
 # === Reverse Shell / Network Listeners ===
 echo "$COMMAND" | grep -qiE 'nc\s+(-[a-zA-Z]*)*(l|e)\s' && block_command "REVERSE_SHELL" "netcat listener/exec"
@@ -104,7 +109,8 @@ echo "$COMMAND" | grep -qiE 'base64.*\.ssh/' && block_command "CREDENTIAL_ACCESS
 echo "$COMMAND" | grep -qiE '(cp|mv|cat)\s.*/etc/shadow' && block_command "CREDENTIAL_ACCESS" "shadow file"
 
 # === Privilege Escalation ===
-echo "$COMMAND" | grep -qE '(^|\s)(sudo|doas|pkexec)\s' && block_command "PRIVILEGE_ESCALATION" "sudo/doas/pkexec"
+# Also catch sudo( without space (e.g. $(sudo cmd) where sudo is preceded by open paren)
+echo "$COMMAND" | grep -qE '(^|[\s\(])(sudo|doas|pkexec)[\s\(]' && block_command "PRIVILEGE_ESCALATION" "sudo/doas/pkexec"
 echo "$COMMAND" | grep -qE '(^|\s)su\s+(-|root)' && block_command "PRIVILEGE_ESCALATION" "su root"
 echo "$COMMAND" | grep -qiE 'chmod\s+([0-7]*7[0-7]{2}|u\+s|g\+s|\+s)' && block_command "PRIVILEGE_ESCALATION" "dangerous chmod"
 echo "$COMMAND" | grep -qiE 'chown\s+(root|0:)' && block_command "PRIVILEGE_ESCALATION" "chown root"
@@ -156,7 +162,18 @@ echo "$COMMAND" | grep -qiE 'git\s+clean\s+-[a-zA-Z]*f' && block_command "GIT_FO
 
 # === Package installation from untrusted sources ===
 echo "$COMMAND" | grep -qiE 'pip\s+install\s+--index-url\s+http://' && block_command "UNTRUSTED_PKG" "pip from HTTP"
+echo "$COMMAND" | grep -qiE 'pip\s+install\s+--index-url\s+https?://(?!pypi\.org)' && block_command "UNTRUSTED_PKG" "pip from non-official index"
 echo "$COMMAND" | grep -qiE 'npm\s+install\s+--registry\s+http://' && block_command "UNTRUSTED_PKG" "npm from HTTP"
+
+# === Covert Network Services / Recon ===
+echo "$COMMAND" | grep -qiE 'python[23]?\s+-m\s+http\.server' && block_command "COVERT_NETWORK" "python http server"
+echo "$COMMAND" | grep -qiE 'python[23]?\s+-m\s+SimpleHTTPServer' && block_command "COVERT_NETWORK" "python SimpleHTTPServer"
+echo "$COMMAND" | grep -qiE '(^|\s)strace\s' && block_command "COVERT_NETWORK" "strace syscall tracer"
+echo "$COMMAND" | grep -qiE '(^|\s)ltrace\s' && block_command "COVERT_NETWORK" "ltrace library tracer"
+
+# === Git hook / config manipulation ===
+echo "$COMMAND" | grep -qiE 'git\s+config\s+.*core\.hooksPath' && block_command "GIT_HOOK_TAMPER" "git config core.hooksPath"
+echo "$COMMAND" | grep -qiE 'git\s+config\s+.*core\.fsmonitor' && block_command "GIT_HOOK_TAMPER" "git config core.fsmonitor"
 
 # === History / log manipulation ===
 echo "$COMMAND" | grep -qiE '(history\s+-c|>\s*~/\.bash_history|unset\s+HISTFILE)' && block_command "LOG_TAMPER" "history manipulation"

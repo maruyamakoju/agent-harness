@@ -241,3 +241,86 @@ sudo scripts/persist-iptables.sh auto
 | Tailscale | $0 | Personal plan |
 | GitHub | $0 | Free tier |
 | **Total** | **$80-350** | |
+
+## MCP Server Integration
+
+Two MCP servers are pre-configured for the agent:
+
+### Ollama (Local LLM)
+
+Used for code review and lightweight classification tasks without API cost.
+
+```bash
+# Setup Ollama with recommended models
+bash scripts/setup-ollama.sh
+
+# Models used: DeepSeek-Coder-V2, Phi-3.5
+```
+
+### RevenueCat MCP
+
+Connect the agent directly to RevenueCat's subscription API using the official [RevenueCat MCP server](https://www.revenuecat.com/docs/tools/mcp).
+
+**Setup:**
+```bash
+# Add to .env
+REVENUECAT_API_KEY=rc_sk_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+```
+
+**The agent can now:**
+- Create and manage products, entitlements, and offerings
+- Configure paywalls programmatically
+- Query subscription analytics and customer data
+- Run pricing experiments via the Charts API
+
+**26 tools across 6 categories**: products, entitlements, offerings, paywalls, customer management, analytics
+
+## RevenueCat Integration
+
+Agent-harness is designed as an "agent-first" platform for subscription app development. With RevenueCat MCP:
+
+```bash
+# Example: Create a subscription job
+scripts/create-job.sh \
+  --repo git@github.com:your-org/app.git \
+  --task "Integrate RevenueCat SDK, create monthly/annual offerings, and add paywall screen" \
+  --setup "npm ci" \
+  --test "npm test"
+```
+
+The agent will:
+1. Integrate the RevenueCat SDK into your app
+2. Use RevenueCat MCP tools to create matching products and entitlements
+3. Configure offerings with your pricing tiers
+4. Implement and test the paywall UI
+5. Open a PR with the complete implementation
+
+**Observability:** Monitor costs and job performance at `http://localhost:7860`. The `/metrics` endpoint exports Prometheus-compatible data for Grafana dashboards.
+
+```bash
+# Check Prometheus metrics
+curl http://localhost:7860/metrics
+
+# Batch-create jobs across multiple repos
+curl -X POST http://localhost:7860/api/v1/jobs/batch \
+  -H "Authorization: Bearer $DASHBOARD_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jobs": [{"repo": "...", "task": "..."}, ...]}'
+```
+
+## Security Guide
+
+### Token Rotation
+
+If a GitHub token is compromised:
+1. Revoke at [github.com/settings/tokens](https://github.com/settings/tokens)
+2. Generate a new token with the same scopes (`repo`, `read:org`, `workflow`)
+3. Update `.env`: `GITHUB_TOKEN=ghp_NEW_TOKEN`
+4. Restart: `docker compose restart agent`
+
+If REVENUECAT_API_KEY is compromised:
+1. Revoke at [app.revenuecat.com/settings/api-keys](https://app.revenuecat.com/settings/api-keys)
+2. Generate a new secret key
+3. Update `.env` and restart
+
+**Never commit `.env` to git.** It is in `.gitignore` by default.

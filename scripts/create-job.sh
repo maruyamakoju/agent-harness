@@ -212,10 +212,12 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Write job file
+# Write job file (atomic: write to .tmp then rename)
 # ---------------------------------------------------------------------------
 JOB_FILE="${JOBS_DIR}/${JOB_ID}.json"
-echo "$JOB_JSON" > "$JOB_FILE"
+TMP_FILE="${JOB_FILE}.tmp"
+echo "$JOB_JSON" > "$TMP_FILE"
+mv "$TMP_FILE" "$JOB_FILE"
 
 echo "Job created: $JOB_FILE"
 echo "Job ID: $JOB_ID"

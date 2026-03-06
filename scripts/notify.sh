@@ -4,7 +4,7 @@
 # Supports: Telegram, Discord webhook, generic webhook
 # Usage: notify.sh <event> <job_id> [message]
 # =============================================================================
-set -uo pipefail
+set -euo pipefail
 
 EVENT="${1:-unknown}"
 JOB_ID="${2:-unknown}"
@@ -60,12 +60,14 @@ FULL_TEXT="${FULL_TEXT}\n🕐 ${TIMESTAMP}"
 # Telegram
 # ---------------------------------------------------------------------------
 if [[ -n "${TELEGRAM_BOT_TOKEN:-}" ]] && [[ -n "${TELEGRAM_CHAT_ID:-}" ]]; then
-    curl -s -X POST \
+    if ! curl -sf --max-time 10 -X POST \
         "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
         -d "chat_id=${TELEGRAM_CHAT_ID}" \
         -d "text=$(echo -e "$FULL_TEXT")" \
         -d "parse_mode=HTML" \
-        > /dev/null 2>&1 || echo "WARN: Telegram notification failed"
+        > /dev/null 2>&1; then
+        echo "[${TIMESTAMP}] [NOTIFY] WARN: Telegram notification failed (event=${EVENT})" >&2
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -73,11 +75,13 @@ fi
 # ---------------------------------------------------------------------------
 if [[ -n "${DISCORD_WEBHOOK_URL:-}" ]]; then
     payload=$(jq -n --arg content "$(echo -e "$FULL_TEXT")" '{"content": $content}')
-    curl -s -X POST \
+    if ! curl -sf --max-time 10 -X POST \
         "${DISCORD_WEBHOOK_URL}" \
         -H "Content-Type: application/json" \
         -d "$payload" \
-        > /dev/null 2>&1 || echo "WARN: Discord notification failed"
+        > /dev/null 2>&1; then
+        echo "[${TIMESTAMP}] [NOTIFY] WARN: Discord notification failed (event=${EVENT})" >&2
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -85,11 +89,13 @@ fi
 # ---------------------------------------------------------------------------
 if [[ -n "${WEBHOOK_URL:-}" ]]; then
     payload=$(jq -n --arg text "$(echo -e "$FULL_TEXT")" '{"text": $text}')
-    curl -s -X POST \
+    if ! curl -sf --max-time 10 -X POST \
         "${WEBHOOK_URL}" \
         -H "Content-Type: application/json" \
         -d "$payload" \
-        > /dev/null 2>&1 || echo "WARN: Webhook notification failed"
+        > /dev/null 2>&1; then
+        echo "[${TIMESTAMP}] [NOTIFY] WARN: Webhook notification failed (event=${EVENT})" >&2
+    fi
 fi
 
 # Always log
