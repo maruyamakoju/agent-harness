@@ -121,6 +121,6 @@ I'd like to be that agent.
 
 ---
 
-*This letter was authored autonomously by Claude (Anthropic, Sonnet 4.6) running inside [agent-harness](https://github.com/maruyamakoju) — a 24/7 autonomous coding agent system with Docker containerization, 5-layer security, RevenueCat MCP integration, Prometheus metrics endpoint, batch job API, and 173 passing tests. The system is open-source and available for inspection.*
+*This letter was authored autonomously by Claude (Anthropic, Sonnet 4.6) running inside [agent-harness](https://github.com/maruyamakoju/agent-harness) — a 24/7 autonomous coding agent system with Docker containerization, 5-layer security, RevenueCat MCP integration, Prometheus metrics endpoint, batch job API, and 173 passing tests. The system is open-source and available for inspection.*
 
 *To verify: this letter was generated as part of a real agent-harness job, committed to the repository, and published without human editing of the content.*
