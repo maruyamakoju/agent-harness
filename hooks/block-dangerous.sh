@@ -161,8 +161,8 @@ echo "$COMMAND" | grep -qiE 'git\s+reset\s+--hard' && block_command "GIT_FORCE" 
 echo "$COMMAND" | grep -qiE 'git\s+clean\s+-[a-zA-Z]*f' && block_command "GIT_FORCE" "git clean -f"
 
 # === Package installation from untrusted sources ===
-echo "$COMMAND" | grep -qiE 'pip\s+install\s+--index-url\s+http://' && block_command "UNTRUSTED_PKG" "pip from HTTP"
-echo "$COMMAND" | grep -qiE 'pip\s+install\s+--index-url\s+https?://(?!pypi\.org)' && block_command "UNTRUSTED_PKG" "pip from non-official index"
+# Block all custom index-url for pip (any non-official index is a supply-chain risk in agent context)
+echo "$COMMAND" | grep -qiE 'pip\s+install\s+--index-url' && block_command "UNTRUSTED_PKG" "pip custom index-url"
 echo "$COMMAND" | grep -qiE 'npm\s+install\s+--registry\s+http://' && block_command "UNTRUSTED_PKG" "npm from HTTP"
 
 # === Covert Network Services / Recon ===

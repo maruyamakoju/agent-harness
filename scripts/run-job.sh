@@ -898,6 +898,65 @@ Job ID: \`${JOB_ID}\`" \
 }
 
 # ---------------------------------------------------------------------------
+# Webhook delivery
+# Reads HARNESS_DIR/config/webhooks.json and POSTs to matching registrations.
+# Runs best-effort (failures are logged but don't affect job outcome).
+# ---------------------------------------------------------------------------
+fire_webhooks() {
+    local event="$1"   # job_done | job_failed | job_start
+    local webhooks_file="${HARNESS_DIR}/config/webhooks.json"
+
+    [[ -f "$webhooks_file" ]] || return 0
+
+    local hooks
+    hooks=$(jq -c '.[]' "$webhooks_file" 2>/dev/null) || return 0
+
+    local elapsed=$(( $(date +%s) - JOB_START_TIME ))
+    local payload
+    payload=$(jq -cn \
+        --arg event "$event" \
+        --arg job_id "$JOB_ID" \
+        --arg repo "$REPO" \
+        --arg task "$TASK" \
+        --arg work_branch "$WORK_BRANCH" \
+        --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --argjson elapsed "$elapsed" \
+        --argjson cost "${TOTAL_COST_USD:-0}" \
+        '{
+            event: $event,
+            job_id: $job_id,
+            repo: $repo,
+            task: $task,
+            work_branch: $work_branch,
+            timestamp: $timestamp,
+            elapsed_sec: $elapsed,
+            cost_usd: $cost
+        }' 2>/dev/null) || return 0
+
+    while IFS= read -r hook; do
+        [[ -z "$hook" ]] && continue
+        local url events_json
+        url=$(echo "$hook" | jq -r '.url // ""' 2>/dev/null)
+        events_json=$(echo "$hook" | jq -r '.events // ["job_done","job_failed"] | .[]' 2>/dev/null)
+
+        # Skip if URL is empty or event not in this hook's list
+        [[ -z "$url" ]] && continue
+        echo "$events_json" | grep -qxF "$event" || continue
+
+        # Fire webhook (best-effort, no retry)
+        if curl -sf --max-time 10 -X POST \
+            "$url" \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            > /dev/null 2>&1; then
+            log "INFO" "Webhook delivered: event=$event url=$url"
+        else
+            log "WARN" "Webhook delivery failed: event=$event url=$url"
+        fi
+    done <<< "$hooks"
+}
+
+# ---------------------------------------------------------------------------
 # Cleanup workspace
 # ---------------------------------------------------------------------------
 cleanup() {
@@ -925,6 +984,7 @@ main() {
     log "INFO" "GPU required: $GPU_REQUIRED"
     log "INFO" "=========================================="
     log_json "job_start" "repo=$REPO task=$TASK budget=${TIME_BUDGET}s"
+    fire_webhooks "job_start" || true
 
     # Write agent PID into the job file so cancel-job.sh / dashboard can signal us
     if [[ -f "$JOB_FILE" ]]; then
@@ -950,11 +1010,13 @@ main() {
             DONE)
                 log "INFO" "Job completed successfully: $JOB_ID"
                 log_json "job_done" "success=true"
+                fire_webhooks "job_done" || true
                 exit 0
                 ;;
             FAILED)
                 log "ERROR" "Job failed: $JOB_ID"
                 log_json "job_failed" ""
+                fire_webhooks "job_failed" || true
 
                 # Attempt partial push if we have any work
                 if [[ -d "$WORKSPACE/.git" ]]; then

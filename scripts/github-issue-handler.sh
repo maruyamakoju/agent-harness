@@ -83,7 +83,6 @@ process_new_issues() {
                 local key="$1"
                 local text="$2"
                 echo "$text" | awk -v key="$key" '
-                    BEGIN { IGNORECASE=1 }
                     /^[[:space:]]*/ {
                         line = $0
                         # strip leading whitespace
