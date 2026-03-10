@@ -9,9 +9,9 @@ Each loop must produce a small, testable increment — not a large batch.
 
 ## Mutation Scope
 
-- Max files changed per loop: 3
-- Max files created per loop: 2
-- Max diff lines per loop: 200
+- Max files changed per loop: 5
+- Max files created per loop: 4
+- Max diff lines per loop: 300
 - Max endpoint/route changes per loop: 1
 
 ## Eval Protocol
