@@ -41,19 +41,19 @@ write_eval_result() {
     local etype="$1"
     local passed="$2"
     local summary="$3"
-    local duration="$4"
+    local duration="${4:-0}"
     local details="${5:-{}}"
 
+    # Sanitize: ensure duration is numeric
+    [[ "$duration" =~ ^[0-9]+$ ]] || duration=0
+
+    # Sanitize: ensure passed is valid JSON boolean
+    [[ "$passed" == "true" ]] && passed=true || passed=false
+
     local result_file="${EVALS_DIR}/${etype}-${TS_SLUG}.json"
-    jq -n \
-        --arg type "$etype" \
-        --arg ts "$TIMESTAMP" \
-        --argjson pass "$passed" \
-        --arg summary "$summary" \
-        --argjson details "$details" \
-        --argjson dur "$duration" \
-        '{type: $type, timestamp: $ts, pass: $pass, summary: $summary, details: $details, duration_sec: $dur}' \
-        > "$result_file"
+    cat > "$result_file" <<EVALEOF
+{"type":"${etype}","timestamp":"${TIMESTAMP}","pass":${passed},"summary":"$(echo "$summary" | sed 's/"/\\"/g' | tr '\n' ' ')","details":${details},"duration_sec":${duration}}
+EVALEOF
     echo "[eval] Wrote: $result_file"
 }
 
@@ -98,8 +98,8 @@ run_lint() {
     start_time=$(date +%s)
     local output="" exit_code=0
 
-    if command -v ruff &>/dev/null && [[ -f "pyproject.toml" || -f "setup.py" ]]; then
-        output=$(ruff check . 2>&1 | tail -30) || exit_code=$?
+    if (command -v ruff &>/dev/null || python -m ruff --version &>/dev/null) && [[ -f "pyproject.toml" || -f "setup.py" ]]; then
+        output=$(python -m ruff check . 2>&1 | tail -30) || exit_code=$?
     elif [[ -f "package.json" ]] && grep -q '"lint"' package.json 2>/dev/null; then
         output=$(npm run lint 2>&1 | tail -30) || exit_code=$?
     elif command -v eslint &>/dev/null && [[ -f "package.json" ]]; then
@@ -130,8 +130,8 @@ run_typecheck() {
     start_time=$(date +%s)
     local output="" exit_code=0
 
-    if command -v mypy &>/dev/null && [[ -f "pyproject.toml" || -f "setup.py" ]]; then
-        output=$(mypy . 2>&1 | tail -30) || exit_code=$?
+    if (command -v mypy &>/dev/null || python -m mypy --version &>/dev/null) && [[ -f "pyproject.toml" || -f "setup.py" ]]; then
+        output=$(python -m mypy . 2>&1 | tail -30) || exit_code=$?
     elif command -v tsc &>/dev/null && [[ -f "tsconfig.json" ]]; then
         output=$(tsc --noEmit 2>&1 | tail -30) || exit_code=$?
     else
