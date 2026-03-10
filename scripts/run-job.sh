@@ -1391,9 +1391,14 @@ PROMPT
     else
         log "WARN" "Scaffold Claude invocation failed, using template defaults"
         log_json "scaffold_fallback" "using template defaults"
-        # Initial commit with template defaults
-        git add -A 2>/dev/null || true
+    fi
+
+    # Ensure scaffold files are committed (Claude's commit may have been permission-denied)
+    cd "$WORKSPACE"
+    git add -A 2>/dev/null || true
+    if ! git diff --cached --quiet 2>/dev/null; then
         git commit -m "chore(scaffold): initialize product state for ${PRODUCT_NAME}" 2>/dev/null || true
+        log "INFO" "Scaffold files committed by harness"
     fi
 
     LAST_COMMIT_HASH=$(git -C "$WORKSPACE" rev-parse HEAD 2>/dev/null || echo "")
@@ -1699,8 +1704,6 @@ PROMPT
     if invoke_claude "$code_prompt"; then
         log "INFO" "CODE completed (loop $LOOP_COUNT)"
         log_json "product_code_done" "loop=$LOOP_COUNT"
-        log_state_transition "CODE" "CODE_AUDIT"
-        STATE="CODE_AUDIT"
     else
         local exit_code=$?
         log "ERROR" "CODE: Claude exited with code $exit_code"
@@ -1709,9 +1712,18 @@ PROMPT
             STATE="FAILED"
             return
         fi
-        # Go to audit anyway to see if partial work exists
-        STATE="CODE_AUDIT"
     fi
+
+    # Ensure code changes are committed (Claude's commit may have been permission-denied)
+    cd "$WORKSPACE"
+    git add -A 2>/dev/null || true
+    if ! git diff --cached --quiet 2>/dev/null; then
+        git commit -m "feat(loop-$LOOP_COUNT): implement hypothesis" 2>/dev/null || true
+        log "INFO" "CODE changes committed by harness"
+    fi
+
+    log_state_transition "CODE" "CODE_AUDIT"
+    STATE="CODE_AUDIT"
 }
 
 # ---------------------------------------------------------------------------
@@ -1884,6 +1896,7 @@ state_judge() {
         log_json "judge_keep" "before=$SCORE_BEFORE after=$SCORE_AFTER"
         JUDGE_VERDICT="keep"
         CONSECUTIVE_DISCARDS=0
+        LAST_COMMIT_HASH=$(git -C "$WORKSPACE" rev-parse HEAD 2>/dev/null || echo "")
     else
         log "WARN" "JUDGE: DISCARD — score did not improve ($SCORE_BEFORE → $SCORE_AFTER)"
         log_json "judge_discard" "before=$SCORE_BEFORE after=$SCORE_AFTER"
