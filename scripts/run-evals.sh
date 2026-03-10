@@ -42,7 +42,8 @@ write_eval_result() {
     local passed="$2"
     local summary="$3"
     local duration="${4:-0}"
-    local details="${5:-{}}"
+    local details="$5"
+    [[ -z "$details" ]] && details='{}'
 
     # Sanitize: ensure duration is numeric
     [[ "$duration" =~ ^[0-9]+$ ]] || duration=0
