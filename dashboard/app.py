@@ -606,6 +606,23 @@ def api_create_job():
         job["issue_number"] = int(body["issue_number"])
         job["issue_repo"] = str(body["issue_repo"])
 
+    # Product mode fields
+    mode = body.get("mode", "job")
+    if mode not in ("job", "product"):
+        abort(400, description="'mode' must be 'job' or 'product'")
+    job["mode"] = mode
+    if mode == "product":
+        product_name = body.get("product_name", "").strip()
+        if not product_name:
+            abort(400, description="'product_name' is required for product mode")
+        job["product_name"] = product_name
+        job["max_loops"] = int(body.get("max_loops", 500))
+        job["create_repo"] = bool(body.get("create_repo", False))
+        if body.get("day_plan"):
+            job["day_plan"] = body["day_plan"]
+    else:
+        job["max_loops"] = int(body.get("max_loops", 10))
+
     _write_pending_job(job)
     return jsonify(job), 201
 
@@ -763,6 +780,150 @@ def api_rerun_job(job_id: str):
 
     _write_pending_job(new_job)
     return jsonify(new_job), 201
+
+
+# ===== API: Product Mode State Files ========================================
+
+WORKSPACES_DIR = Path(os.environ.get("WORKSPACES_DIR", "/workspaces"))
+
+
+@app.route("/api/jobs/<job_id>/state-files")
+@require_auth
+def api_job_state_files(job_id: str):
+    """Return product mode state files (PROGRESS.md, FEATURES.md, DECISIONS.md).
+
+    Works by reading from the workspace directory for the job.
+    """
+    job_id = _sanitize_job_id(job_id)
+    data, status = _find_job(job_id)
+    if not data:
+        abort(404, description="Job not found")
+
+    workspace = WORKSPACES_DIR / job_id
+    state_files = {}
+    for fname in ("PROGRESS.md", "FEATURES.md", "DECISIONS.md", "RUNBOOK.md", "PROGRAM.md"):
+        fpath = workspace / fname
+        if fpath.exists():
+            try:
+                state_files[fname] = fpath.read_text(encoding="utf-8", errors="replace")[:50000]
+            except Exception:
+                state_files[fname] = None
+        else:
+            state_files[fname] = None
+
+    return jsonify({
+        "job_id": job_id,
+        "mode": data.get("mode", "job"),
+        "product_name": data.get("product_name", ""),
+        "state_files": state_files,
+    })
+
+
+@app.route("/api/jobs/<job_id>/ledger")
+@require_auth
+def api_job_ledger(job_id: str):
+    """Return experiment ledger entries for a product mode job."""
+    job_id = _sanitize_job_id(job_id)
+    data, status = _find_job(job_id)
+    if not data:
+        abort(404, description="Job not found")
+
+    workspace = WORKSPACES_DIR / job_id
+    ledger_path = workspace / "EVALS" / "ledger.jsonl"
+    entries = []
+    if ledger_path.exists():
+        try:
+            import json as _json
+            for line in ledger_path.read_text(encoding="utf-8", errors="replace").splitlines():
+                line = line.strip()
+                if line:
+                    try:
+                        entries.append(_json.loads(line))
+                    except _json.JSONDecodeError:
+                        pass
+        except Exception:
+            pass
+
+    return jsonify({
+        "job_id": job_id,
+        "entries": entries,
+        "count": len(entries),
+    })
+
+
+@app.route("/api/jobs/<job_id>/day-progress")
+@require_auth
+def api_job_day_progress(job_id: str):
+    """Return day-by-day progress for a product mode job."""
+    job_id = _sanitize_job_id(job_id)
+    data, status = _find_job(job_id)
+    if not data:
+        abort(404, description="Job not found")
+
+    day_plan = data.get("day_plan")
+    workspace = WORKSPACES_DIR / job_id
+
+    # Read current day from PROGRESS.md
+    current_day = 0
+    progress_path = workspace / "PROGRESS.md"
+    if progress_path.exists():
+        try:
+            content = progress_path.read_text(encoding="utf-8", errors="replace")
+            import re as _re
+            m = _re.search(r"##\s*Day:\s*(\d+)", content)
+            if m:
+                current_day = int(m.group(1))
+        except Exception:
+            pass
+
+    # Read loop count from JSONL events
+    loop_count = 0
+    events = _read_jsonl(_jsonl_path(job_id))
+    for ev in events:
+        if "loop=" in ev.get("detail", ""):
+            import re as _re
+            m = _re.search(r"loop=(\d+)", ev.get("detail", ""))
+            if m:
+                loop_count = max(loop_count, int(m.group(1)))
+
+    result = {
+        "job_id": job_id,
+        "mode": data.get("mode", "job"),
+        "product_name": data.get("product_name", ""),
+        "current_day": current_day,
+        "loop_count": loop_count,
+        "max_loops": data.get("max_loops", 10),
+        "day_plan": day_plan,
+    }
+    return jsonify(result)
+
+
+@app.route("/api/jobs/<job_id>/evals")
+@require_auth
+def api_job_evals(job_id: str):
+    """Return evaluation results for a product mode job."""
+    job_id = _sanitize_job_id(job_id)
+    data, status = _find_job(job_id)
+    if not data:
+        abort(404, description="Job not found")
+
+    workspace = WORKSPACES_DIR / job_id
+    evals_dir = workspace / "EVALS"
+    evals = []
+
+    if evals_dir.is_dir():
+        for fpath in sorted(evals_dir.glob("*.json"), reverse=True)[:50]:
+            try:
+                eval_data = json.loads(fpath.read_text(encoding="utf-8"))
+                evals.append(eval_data)
+            except Exception:
+                pass
+
+    return jsonify({
+        "job_id": job_id,
+        "evals": evals,
+        "total": len(evals),
+    })
 
 
 # ===== API: Activity Feed (batch - eliminates N+1) =========================

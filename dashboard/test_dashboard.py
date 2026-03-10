@@ -1802,6 +1802,515 @@ class TestApiResponseWrapper:
 
 
 # ---------------------------------------------------------------------------
+# Product Mode Tests
+# ---------------------------------------------------------------------------
+class TestProductModeJobCreation:
+    """Tests for product mode job creation via POST /api/jobs."""
+
+    def test_create_product_job(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/product.git",
+            "task": "Build a SaaS dashboard",
+            "mode": "product",
+            "product_name": "SaaS Dashboard",
+            "max_loops": 500,
+        })
+        assert r.status_code == 201
+        data = r.get_json()
+        assert data["mode"] == "product"
+        assert data["product_name"] == "SaaS Dashboard"
+        assert data["max_loops"] == 500
+
+    def test_create_product_job_requires_product_name(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/product.git",
+            "task": "Build something",
+            "mode": "product",
+        })
+        assert r.status_code == 400
+
+    def test_create_job_mode_defaults_to_job(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "Fix a bug",
+        })
+        assert r.status_code == 201
+        data = r.get_json()
+        assert data["mode"] == "job"
+        assert data["max_loops"] == 10
+
+    def test_create_product_job_with_day_plan(self, client):
+        day_plan = {
+            "days": [
+                {"day": 0, "name": "Scaffold", "goals": ["init"], "max_loops": 50},
+                {"day": 1, "name": "Build", "goals": ["core"], "max_loops": 150},
+            ]
+        }
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/product.git",
+            "task": "Build app",
+            "mode": "product",
+            "product_name": "Test App",
+            "day_plan": day_plan,
+        })
+        assert r.status_code == 201
+        data = r.get_json()
+        assert data["day_plan"]["days"][0]["name"] == "Scaffold"
+
+    def test_create_product_job_with_create_repo(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/product.git",
+            "task": "Build app from scratch",
+            "mode": "product",
+            "product_name": "New App",
+            "create_repo": True,
+        })
+        assert r.status_code == 201
+        data = r.get_json()
+        assert data["create_repo"] is True
+
+    def test_invalid_mode_rejected(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "Do something",
+            "mode": "invalid",
+        })
+        assert r.status_code == 400
+
+    def test_product_job_max_loops_custom(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/product.git",
+            "task": "Build app",
+            "mode": "product",
+            "product_name": "Custom Loops",
+            "max_loops": 100,
+        })
+        assert r.status_code == 201
+        assert r.get_json()["max_loops"] == 100
+
+    def test_job_mode_max_loops_default(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "Fix something",
+        })
+        assert r.status_code == 201
+        assert r.get_json()["max_loops"] == 10
+
+    def test_product_mode_max_loops_default(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/product.git",
+            "task": "Build app",
+            "mode": "product",
+            "product_name": "Default Loops",
+        })
+        assert r.status_code == 201
+        assert r.get_json()["max_loops"] == 500
+
+
+class TestProductModeJobList:
+    """Tests for product mode jobs in job listing."""
+
+    def test_product_job_appears_in_list(self, client):
+        # Create a product job
+        client.post("/api/jobs", json={
+            "repo": "https://github.com/test/product.git",
+            "task": "Build product",
+            "mode": "product",
+            "product_name": "Listed Product",
+        })
+        r = client.get("/api/jobs")
+        assert r.status_code == 200
+        jobs = r.get_json()
+        product_jobs = [j for j in jobs if j.get("mode") == "product"]
+        assert len(product_jobs) >= 1
+        assert any(j["product_name"] == "Listed Product" for j in product_jobs)
+
+    def test_job_mode_jobs_still_listed(self, client):
+        r = client.get("/api/jobs")
+        assert r.status_code == 200
+        jobs = r.get_json()
+        # Pre-existing jobs have no mode field, should still appear
+        assert len(jobs) >= 1
+
+
+class TestProductModeStateFiles:
+    """Tests for GET /api/jobs/<id>/state-files."""
+
+    def test_state_files_endpoint_exists(self, client, test_data_dir):
+        r = client.get("/api/jobs/2026-01-01T120000Z-test-done/state-files")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert "state_files" in data
+        assert "job_id" in data
+        assert data["mode"] == "job"  # default for existing jobs
+
+    def test_state_files_returns_none_for_missing_files(self, client, test_data_dir):
+        r = client.get("/api/jobs/2026-01-01T120000Z-test-done/state-files")
+        data = r.get_json()
+        # No workspace exists for this test job, so files should be None
+        for fname in ["PROGRESS.md", "FEATURES.md", "DECISIONS.md", "RUNBOOK.md"]:
+            assert data["state_files"][fname] is None
+
+    def test_state_files_with_workspace(self, client, test_data_dir):
+        """Test state files when workspace directory exists."""
+        workspaces = test_data_dir / "workspaces"
+        import app as app_module
+        app_module.WORKSPACES_DIR = workspaces
+
+        job_id = "2026-01-01T120000Z-test-done"
+        ws = workspaces / job_id
+        ws.mkdir(parents=True, exist_ok=True)
+        (ws / "PROGRESS.md").write_text("# Progress\n## Day: 1\n## Loop: 42", encoding="utf-8")
+        (ws / "FEATURES.md").write_text("# Features\n| F-001 | Auth | done |", encoding="utf-8")
+
+        r = client.get(f"/api/jobs/{job_id}/state-files")
+        data = r.get_json()
+        assert "Progress" in data["state_files"]["PROGRESS.md"]
+        assert "Features" in data["state_files"]["FEATURES.md"]
+        assert data["state_files"]["DECISIONS.md"] is None
+
+    def test_state_files_404_for_unknown_job(self, client):
+        r = client.get("/api/jobs/nonexistent-job/state-files")
+        assert r.status_code == 404
+
+    def test_state_files_requires_auth(self, auth_client):
+        r = auth_client.get("/api/jobs/2026-01-01T120000Z-test-done/state-files")
+        assert r.status_code == 401
+
+
+class TestProductModeLedger:
+    """Tests for GET /api/jobs/<id>/ledger."""
+
+    def test_ledger_endpoint_exists(self, client, test_data_dir):
+        r = client.get("/api/jobs/2026-01-01T120000Z-test-done/ledger")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert "entries" in data
+        assert "count" in data
+        assert data["count"] == 0  # no ledger file exists
+
+    def test_ledger_returns_entries(self, client, test_data_dir):
+        """Test ledger with actual JSONL data."""
+        workspaces = test_data_dir / "workspaces"
+        import app as app_module
+        app_module.WORKSPACES_DIR = workspaces
+
+        job_id = "2026-01-01T120000Z-test-done"
+        ws = workspaces / job_id
+        evals_dir = ws / "EVALS"
+        evals_dir.mkdir(parents=True, exist_ok=True)
+        (evals_dir / "ledger.jsonl").write_text(
+            '{"loop":1,"verdict":"keep","kept":true,"score_before":"0.5","score_after":"0.6"}\n'
+            '{"loop":2,"verdict":"discard_regression","kept":false,"score_before":"0.6","score_after":"0.5"}\n',
+            encoding="utf-8",
+        )
+
+        r = client.get(f"/api/jobs/{job_id}/ledger")
+        data = r.get_json()
+        assert data["count"] == 2
+        assert data["entries"][0]["verdict"] == "keep"
+        assert data["entries"][1]["kept"] is False
+
+    def test_ledger_404_for_unknown_job(self, client):
+        r = client.get("/api/jobs/nonexistent-job/ledger")
+        assert r.status_code == 404
+
+    def test_ledger_requires_auth(self, auth_client):
+        r = auth_client.get("/api/jobs/2026-01-01T120000Z-test-done/ledger")
+        assert r.status_code == 401
+
+    def test_state_files_includes_program_md(self, client, test_data_dir):
+        """Test that PROGRAM.md is included in state-files response."""
+        workspaces = test_data_dir / "workspaces"
+        import app as app_module
+        app_module.WORKSPACES_DIR = workspaces
+
+        job_id = "2026-01-01T120000Z-test-done"
+        ws = workspaces / job_id
+        ws.mkdir(parents=True, exist_ok=True)
+        (ws / "PROGRAM.md").write_text("# PROGRAM.md\n## Mutation Scope\nmax: 3", encoding="utf-8")
+
+        r = client.get(f"/api/jobs/{job_id}/state-files")
+        data = r.get_json()
+        assert "PROGRAM.md" in data["state_files"]
+        assert "Mutation Scope" in data["state_files"]["PROGRAM.md"]
+
+
+class TestProductModeDayProgress:
+    """Tests for GET /api/jobs/<id>/day-progress."""
+
+    def test_day_progress_endpoint_exists(self, client):
+        r = client.get("/api/jobs/2026-01-01T120000Z-test-done/day-progress")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert "current_day" in data
+        assert "loop_count" in data
+        assert "max_loops" in data
+
+    def test_day_progress_returns_mode(self, client):
+        r = client.get("/api/jobs/2026-01-01T120000Z-test-done/day-progress")
+        data = r.get_json()
+        assert data["mode"] == "job"  # default for existing jobs
+
+    def test_day_progress_with_workspace(self, client, test_data_dir):
+        """Test day progress when workspace has PROGRESS.md."""
+        workspaces = test_data_dir / "workspaces"
+        import app as app_module
+        app_module.WORKSPACES_DIR = workspaces
+
+        job_id = "2026-01-01T120000Z-test-done"
+        ws = workspaces / job_id
+        ws.mkdir(parents=True, exist_ok=True)
+        (ws / "PROGRESS.md").write_text("## Day: 2\n## Loop: 150", encoding="utf-8")
+
+        r = client.get(f"/api/jobs/{job_id}/day-progress")
+        data = r.get_json()
+        assert data["current_day"] == 2
+
+    def test_day_progress_404_for_unknown_job(self, client):
+        r = client.get("/api/jobs/nonexistent-job/day-progress")
+        assert r.status_code == 404
+
+    def test_day_progress_requires_auth(self, auth_client):
+        r = auth_client.get("/api/jobs/2026-01-01T120000Z-test-done/day-progress")
+        assert r.status_code == 401
+
+
+class TestProductModeEvals:
+    """Tests for GET /api/jobs/<id>/evals."""
+
+    def test_evals_endpoint_exists(self, client):
+        r = client.get("/api/jobs/2026-01-01T120000Z-test-done/evals")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert "evals" in data
+        assert "total" in data
+
+    def test_evals_empty_when_no_workspace(self, client):
+        r = client.get("/api/jobs/2026-01-01T120000Z-test-done/evals")
+        data = r.get_json()
+        assert data["evals"] == []
+        assert data["total"] == 0
+
+    def test_evals_with_data(self, client, test_data_dir):
+        """Test evals endpoint when EVALS/ directory has results."""
+        workspaces = test_data_dir / "workspaces"
+        import app as app_module
+        app_module.WORKSPACES_DIR = workspaces
+
+        job_id = "2026-01-01T120000Z-test-done"
+        evals_dir = workspaces / job_id / "EVALS"
+        evals_dir.mkdir(parents=True, exist_ok=True)
+
+        eval_result = {
+            "type": "unit",
+            "timestamp": "2026-01-01T12:00:00Z",
+            "pass": True,
+            "summary": "42 passed, 0 failed",
+            "details": {},
+            "duration_sec": 12.5,
+        }
+        (evals_dir / "unit-20260101-120000.json").write_text(
+            json.dumps(eval_result), encoding="utf-8"
+        )
+
+        r = client.get(f"/api/jobs/{job_id}/evals")
+        data = r.get_json()
+        assert data["total"] == 1
+        assert data["evals"][0]["type"] == "unit"
+        assert data["evals"][0]["pass"] is True
+
+    def test_evals_404_for_unknown_job(self, client):
+        r = client.get("/api/jobs/nonexistent-job/evals")
+        assert r.status_code == 404
+
+    def test_evals_requires_auth(self, auth_client):
+        r = auth_client.get("/api/jobs/2026-01-01T120000Z-test-done/evals")
+        assert r.status_code == 401
+
+
+class TestProductModeBackwardCompat:
+    """Ensure product mode changes don't break existing functionality."""
+
+    def test_existing_done_job_still_accessible(self, client):
+        r = client.get("/api/jobs/2026-01-01T120000Z-test-done")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["task"] == "Add unit tests for auth module"
+
+    def test_existing_job_creation_unchanged(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "Standard job test",
+            "setup": ["npm ci"],
+            "test": ["npm test"],
+        })
+        assert r.status_code == 201
+        data = r.get_json()
+        assert data["mode"] == "job"
+        assert "product_name" not in data
+
+    def test_batch_creation_still_works(self, client):
+        r = client.post("/api/jobs/batch", json={
+            "jobs": [
+                {"repo": "https://github.com/test/repo.git", "task": "Batch test 1"},
+                {"repo": "https://github.com/test/repo.git", "task": "Batch test 2"},
+            ]
+        })
+        assert r.status_code == 201
+        data = r.get_json()
+        assert len(data["created"]) == 2
+
+    def test_search_still_works(self, client):
+        r = client.get("/api/search?q=test")
+        assert r.status_code == 200
+
+    def test_status_still_works(self, client):
+        r = client.get("/api/status")
+        assert r.status_code == 200
+
+    def test_activity_still_works(self, client):
+        r = client.get("/api/activity")
+        assert r.status_code == 200
+
+    def test_cancel_still_works(self, client, test_data_dir):
+        # Create a pending job to cancel
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "Cancel test",
+        })
+        job_id = r.get_json()["id"]
+        r2 = client.post(f"/api/jobs/{job_id}/cancel")
+        assert r2.status_code == 200
+
+    def test_delete_still_works(self, client, test_data_dir):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "Delete test",
+        })
+        job_id = r.get_json()["id"]
+        r2 = client.delete(f"/api/jobs/{job_id}")
+        assert r2.status_code == 200
+
+    def test_rerun_still_works(self, client):
+        r = client.post("/api/jobs/2026-01-01T120000Z-test-done/rerun")
+        assert r.status_code == 201
+
+
+class TestProductModeIntegration:
+    """Integration tests for product mode workflows."""
+
+    def test_full_product_job_workflow(self, client, test_data_dir):
+        """Create → List → Get State → Get Day Progress → Get Evals."""
+        # Create
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/integration.git",
+            "task": "Build complete app",
+            "mode": "product",
+            "product_name": "Integration Test App",
+            "max_loops": 100,
+            "day_plan": {
+                "days": [
+                    {"day": 0, "name": "Scaffold", "goals": ["init"], "max_loops": 20},
+                ]
+            },
+        })
+        assert r.status_code == 201
+        job_id = r.get_json()["id"]
+
+        # List
+        r = client.get("/api/jobs")
+        jobs = r.get_json()
+        matching = [j for j in jobs if j["id"] == job_id]
+        assert len(matching) == 1
+        assert matching[0]["mode"] == "product"
+
+        # State files
+        r = client.get(f"/api/jobs/{job_id}/state-files")
+        assert r.status_code == 200
+
+        # Day progress
+        r = client.get(f"/api/jobs/{job_id}/day-progress")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["max_loops"] == 100
+
+        # Evals
+        r = client.get(f"/api/jobs/{job_id}/evals")
+        assert r.status_code == 200
+
+    def test_product_job_detail_includes_mode(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/detail.git",
+            "task": "Detail test",
+            "mode": "product",
+            "product_name": "Detail Product",
+        })
+        job_id = r.get_json()["id"]
+
+        r = client.get(f"/api/jobs/{job_id}")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["mode"] == "product"
+        assert data["product_name"] == "Detail Product"
+
+
+class TestProductModeValidation:
+    """Validation edge cases for product mode."""
+
+    def test_max_loops_zero_accepted(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "Zero loops test",
+            "mode": "product",
+            "product_name": "Zero",
+            "max_loops": 0,
+        })
+        assert r.status_code == 201
+        assert r.get_json()["max_loops"] == 0
+
+    def test_empty_product_name_rejected(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "Empty name test",
+            "mode": "product",
+            "product_name": "",
+        })
+        assert r.status_code == 400
+
+    def test_whitespace_product_name_rejected(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "Whitespace name test",
+            "mode": "product",
+            "product_name": "   ",
+        })
+        assert r.status_code == 400
+
+    def test_product_job_has_all_required_fields(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "Field check",
+            "mode": "product",
+            "product_name": "Field Check Product",
+        })
+        data = r.get_json()
+        for field in ["id", "repo", "task", "mode", "product_name", "max_loops",
+                       "create_repo", "created_at", "commands"]:
+            assert field in data, f"Missing field: {field}"
+
+    def test_day_plan_null_accepted(self, client):
+        r = client.post("/api/jobs", json={
+            "repo": "https://github.com/test/repo.git",
+            "task": "No plan",
+            "mode": "product",
+            "product_name": "No Plan Product",
+            "day_plan": None,
+        })
+        assert r.status_code == 201
+
+
+# ---------------------------------------------------------------------------
 # Legacy compatibility - keep the original runner for backward compat
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":

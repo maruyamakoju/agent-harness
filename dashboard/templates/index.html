@@ -197,6 +197,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
   <div class="tab" data-tab="kanban">Kanban</div>
   <div class="tab" data-tab="prs">PR追跡</div>
   <div class="tab" data-tab="autoqueue">Auto-queue</div>
+  <div class="tab" data-tab="forge">Product Forge</div>
 </div>
 
 <div class="content">
@@ -495,6 +496,57 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
   </div>
   <div id="autoqueue-content">
     <div class="loading-text">読み込み中...</div>
+  </div>
+</div>
+
+<div class="panel" id="panel-forge">
+  <div class="section-header">
+    <h3>Product Forge</h3>
+    <button class="btn btn-sm primary" id="forge-refresh-btn">更新</button>
+  </div>
+
+  <!-- Product Job List -->
+  <div id="forge-jobs" style="margin-bottom:24px;">
+    <h4 style="margin-bottom:12px;color:var(--text2);">Product Mode ジョブ</h4>
+    <table id="forge-table">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Status</th>
+          <th>Day</th>
+          <th>Loops</th>
+          <th>Task</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="forge-tbody"></tbody>
+    </table>
+    <p id="forge-empty" style="color:var(--text2);display:none;">Product mode ジョブはありません。ジョブ投入タブから mode=product で作成してください。</p>
+  </div>
+
+  <!-- State Files Viewer -->
+  <div id="forge-detail" style="display:none;">
+    <h4 style="margin-bottom:12px;color:var(--text2);" id="forge-detail-title">State Files</h4>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <h5 style="color:var(--accent);margin-bottom:8px;">PROGRESS.md</h5>
+        <div class="log-viewer" id="forge-progress" style="max-height:300px;"></div>
+      </div>
+      <div>
+        <h5 style="color:var(--accent);margin-bottom:8px;">FEATURES.md</h5>
+        <div class="log-viewer" id="forge-features" style="max-height:300px;"></div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+      <div>
+        <h5 style="color:var(--accent);margin-bottom:8px;">DECISIONS.md</h5>
+        <div class="log-viewer" id="forge-decisions" style="max-height:300px;"></div>
+      </div>
+      <div>
+        <h5 style="color:var(--accent);margin-bottom:8px;">Day Progress</h5>
+        <div class="log-viewer" id="forge-day-progress" style="max-height:300px;"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1750,6 +1802,73 @@ const AutoQueueTab = {
 // ===========================================================================
 // Tab Router
 // ===========================================================================
+// ===========================================================================
+// Product Forge Tab
+// ===========================================================================
+const ForgeTab = {
+  init() {
+    const btn = Utils.$('forge-refresh-btn');
+    if (btn) btn.addEventListener('click', () => ForgeTab.load());
+  },
+
+  async load() {
+    try {
+      const resp = await API.get('/api/jobs?per_page=200');
+      const jobs = resp.filter(j => j.mode === 'product');
+      const tbody = Utils.$('forge-tbody');
+      const empty = Utils.$('forge-empty');
+
+      if (!jobs.length) {
+        tbody.innerHTML = '';
+        if (empty) empty.style.display = 'block';
+        return;
+      }
+      if (empty) empty.style.display = 'none';
+
+      tbody.innerHTML = jobs.map(j => {
+        const statusClass = j.status || 'pending';
+        return `<tr>
+          <td><strong>${Utils.escHtml(j.product_name || '-')}</strong></td>
+          <td><span class="badge ${statusClass}">${STATUS_LABELS[statusClass] || statusClass}</span></td>
+          <td>Day ${j.current_day || 0}</td>
+          <td>${j.loop_count || 0} / ${j.max_loops || '-'}</td>
+          <td>${Utils.truncate(j.task, 60)}</td>
+          <td><button class="btn btn-sm" onclick="ForgeTab.showDetail('${j.id}', '${Utils.escHtml(j.product_name || '')}')">詳細</button></td>
+        </tr>`;
+      }).join('');
+    } catch (e) {
+      console.error('ForgeTab load error:', e);
+    }
+  },
+
+  async showDetail(jobId, productName) {
+    const detail = Utils.$('forge-detail');
+    if (!detail) return;
+    detail.style.display = 'block';
+
+    const title = Utils.$('forge-detail-title');
+    if (title) title.textContent = `State Files: ${productName}`;
+
+    try {
+      const [stateResp, dayResp] = await Promise.all([
+        API.get(`/api/jobs/${jobId}/state-files`),
+        API.get(`/api/jobs/${jobId}/day-progress`),
+      ]);
+
+      const sf = stateResp.state_files || {};
+      Utils.$('forge-progress').textContent = sf['PROGRESS.md'] || '(not available)';
+      Utils.$('forge-features').textContent = sf['FEATURES.md'] || '(not available)';
+      Utils.$('forge-decisions').textContent = sf['DECISIONS.md'] || '(not available)';
+
+      const dayInfo = `Current Day: ${dayResp.current_day || 0}\nLoop: ${dayResp.loop_count || 0} / ${dayResp.max_loops || '-'}\n\n` +
+        (dayResp.day_plan ? JSON.stringify(dayResp.day_plan, null, 2) : '(no day plan)');
+      Utils.$('forge-day-progress').textContent = dayInfo;
+    } catch (e) {
+      console.error('ForgeTab detail error:', e);
+    }
+  },
+};
+
 const Router = {
   TAB_HANDLERS: {
     dashboard: () => DashboardTab.load(),
@@ -1831,6 +1950,9 @@ const Router = {
 
   // Metrics refresh button
   Utils.$('metrics-refresh-btn').addEventListener('click', () => MetricsTab.load());
+
+  // Product Forge Tab
+  ForgeTab.init();
 
   // Initial load
   DashboardTab.load();
