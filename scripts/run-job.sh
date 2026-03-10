@@ -1553,6 +1553,14 @@ state_eval_baseline() {
         # Run evals to get baseline results
         bash "${SCRIPTS_DIR}/run-evals.sh" "$WORKSPACE" 2>&1 | tee -a "$JOB_LOG" || true
         SCORE_BEFORE=$(bash "${SCRIPTS_DIR}/run-evals.sh" "$WORKSPACE" --score 2>/dev/null || echo "0.0000")
+
+        # Commit EVALS baseline files so they're excluded from CODE diff
+        # (PRE_CODE_COMMIT is captured at the start of CODE state, after this commit)
+        git add EVALS/ 2>/dev/null || true
+        if ! git diff --cached --quiet 2>/dev/null; then
+            git commit -m "chore(eval-baseline): capture baseline evals (loop $LOOP_COUNT)" 2>/dev/null || true
+            LAST_COMMIT_HASH=$(git -C "$WORKSPACE" rev-parse HEAD 2>/dev/null || echo "")
+        fi
     fi
 
     log "INFO" "EVAL_BASELINE: SCORE_BEFORE=$SCORE_BEFORE"
@@ -1836,17 +1844,17 @@ state_code_audit() {
     local changed_files=0 new_files=0 diff_lines=0
 
     if [[ -n "$PRE_CODE_COMMIT" ]]; then
-        # Count changed code files (exclude state/harness files from cap check)
+        # Count changed code files (exclude state/harness files and EVALS/ from cap check)
         changed_files=$(git -C "$WORKSPACE" diff --name-only "$PRE_CODE_COMMIT"..HEAD 2>/dev/null \
-            | { grep -v -E '^(PROGRESS\.md|FEATURES\.md|DECISIONS\.md|AGENT\.md|PROGRAM\.md|RUNBOOK\.md)$' || true; } \
+            | { grep -v -E '^(PROGRESS\.md|FEATURES\.md|DECISIONS\.md|AGENT\.md|PROGRAM\.md|RUNBOOK\.md|EVALS/.*)$' || true; } \
             | wc -l | tr -d ' ')
         if [[ "$changed_files" -gt "$max_files_changed" ]]; then
             violation="files_changed=$changed_files > max=$max_files_changed"
         fi
 
-        # Count newly created code files (exclude state files)
+        # Count newly created code files (exclude state files and EVALS/)
         new_files=$(git -C "$WORKSPACE" diff --diff-filter=A --name-only "$PRE_CODE_COMMIT"..HEAD 2>/dev/null \
-            | { grep -v -E '^(PROGRESS\.md|FEATURES\.md|DECISIONS\.md|AGENT\.md|PROGRAM\.md|RUNBOOK\.md)$' || true; } \
+            | { grep -v -E '^(PROGRESS\.md|FEATURES\.md|DECISIONS\.md|AGENT\.md|PROGRAM\.md|RUNBOOK\.md|EVALS/.*)$' || true; } \
             | wc -l | tr -d ' ')
         if [[ -z "$violation" && "$new_files" -gt "$max_files_created" ]]; then
             violation="files_created=$new_files > max=$max_files_created"
@@ -1968,6 +1976,11 @@ state_ledger() {
 
     log "INFO" "LEDGER: entry written to $ledger_file"
     log_json "ledger_done" "verdict=$JUDGE_VERDICT kept=$kept"
+
+    # Reset stall detector after any loop (discard is intentional, not a stall)
+    # Next loop's EVAL_BASELINE will commit new EVALS → HEAD will change → stall resets
+    LAST_COMMIT_HASH=$(git -C "$WORKSPACE" rev-parse HEAD 2>/dev/null || echo "")
+    NO_PROGRESS_COUNT=0
 
     log_state_transition "LEDGER" "LOOP_CHECK"
     STATE="LOOP_CHECK"
