@@ -1,0 +1,26 @@
+name: set-priority
+status: scaffolded  # TODO: backend endpoint not yet implemented
+description: |
+  [SCAFFOLDED — endpoint /api/jobs/{job_id}/priority does not exist yet]
+  Change task priority for a product mode job.
+  This modifies the FEATURES.md in the workspace to reorder priorities.
+  Typically invoked via chat: "prioritize billing flow"
+method: POST
+endpoint: /api/jobs/{job_id}/priority
+parameters:
+  - name: job_id
+    type: string
+    required: true
+    description: The ID of the product job
+  - name: feature_id
+    type: string
+    required: true
+    description: "Feature ID to reprioritize (e.g., F-003)"
+  - name: new_priority
+    type: string
+    enum: [P0, P1, P2]
+    required: true
+    description: New priority level
+notes: |
+  This tool requires a custom endpoint. If not yet implemented,
+  the gateway can modify FEATURES.md directly via file system access.

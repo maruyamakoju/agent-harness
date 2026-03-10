@@ -1,0 +1,9 @@
+name: cancel-job
+description: Cancel a pending or running job
+method: POST
+endpoint: /api/jobs/{job_id}/cancel
+parameters:
+  - name: job_id
+    type: string
+    required: true
+    description: The ID of the job to cancel

@@ -1,0 +1,33 @@
+# docker-compose.openclaw.yml
+# OpenClaw Control Plane — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.forge.yml -f openclaw/docker-compose.openclaw.yml up
+
+services:
+  openclaw-gateway:
+    image: openclaw/gateway:latest
+    container_name: openclaw-gateway
+    environment:
+      - OPENCLAW_CONFIG=/config/gateway-config.yaml
+      - HARNESS_API_URL=http://dashboard:7860
+      - DASHBOARD_TOKEN=${DASHBOARD_TOKEN:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+    volumes:
+      - ./gateway-config.yaml:/config/gateway-config.yaml:ro
+      - ./tools:/config/tools:ro
+    ports:
+      - "8090:8090"
+    networks:
+      - agent-net
+    depends_on:
+      - dashboard
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8090/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+networks:
+  agent-net:
+    external: true

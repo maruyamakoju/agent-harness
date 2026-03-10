@@ -1,0 +1,17 @@
+{
+  "id": "product-5loop-crud-001",
+  "repo": "local://create",
+  "base_ref": "main",
+  "work_branch": "forge/todo-api",
+  "task": "Build a TODO REST API with Flask. In-memory storage (dict). JSON responses. Features: list todos (GET /todos), create todo (POST /todos), get single todo (GET /todos/<id>), update todo (PUT /todos/<id>), delete todo (DELETE /todos/<id>). Each endpoint should validate input and return proper HTTP status codes (200, 201, 404, 400). Include pytest tests for each endpoint.",
+  "time_budget_sec": 7200,
+  "mode": "product",
+  "product_name": "TODO API",
+  "max_loops": 5,
+  "create_repo": true,
+  "commands": {
+    "setup": ["pip install flask pytest"],
+    "test": ["python -m pytest tests/ -v --tb=short"]
+  },
+  "day_plan": null
+}
