@@ -6,7 +6,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/harness/hooks/block-dangerous.sh"
+            "command": "bash hooks/block-dangerous.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash hooks/post-edit-lint.sh"
           }
         ]
       }
