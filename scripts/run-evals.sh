@@ -52,8 +52,11 @@ write_eval_result() {
     [[ "$passed" == "true" ]] && passed=true || passed=false
 
     local result_file="${EVALS_DIR}/${etype}-${TS_SLUG}.json"
+    # Strip control characters and escape quotes for valid JSON string
+    local clean_summary
+    clean_summary=$(echo "$summary" | tr -d '\000-\010\013-\037' | sed 's/"/\\"/g' | tr '\n' ' ')
     cat > "$result_file" <<EVALEOF
-{"type":"${etype}","timestamp":"${TIMESTAMP}","pass":${passed},"summary":"$(echo "$summary" | sed 's/"/\\"/g' | tr '\n' ' ')","details":${details},"duration_sec":${duration}}
+{"type":"${etype}","timestamp":"${TIMESTAMP}","pass":${passed},"summary":"${clean_summary}","details":${details},"duration_sec":${duration}}
 EVALEOF
     echo "[eval] Wrote: $result_file"
 }
