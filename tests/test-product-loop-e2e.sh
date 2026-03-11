@@ -777,6 +777,119 @@ test_program_md_loaded() {
 }
 
 # ---------------------------------------------------------------------------
+# Test 10: Target score stop — score >= target_score → stop early
+# ---------------------------------------------------------------------------
+test_target_score_stop() {
+    echo ""
+    echo "=== Test 10: Target Score Stop (score >= target → push) ==="
+    TESTS_RUN=$((TESTS_RUN + 1))
+
+    local test_dir
+    test_dir=$(setup_test_env "target_score_stop")
+    local harness_dir="$test_dir/harness"
+    local workspaces_dir="$test_dir/workspaces"
+    local jobs_dir="$harness_dir/jobs"
+
+    # Lower target_score to 0.95 so MOCK_SCORE_AFTER=0.9500 hits it in loop 1
+    sed -i 's/target_score: 1\.00/target_score: 0.95/' \
+        "$harness_dir/templates/product-state/PROGRAM.md" 2>/dev/null || true
+
+    # max_loops=10 — should stop at loop 1 on target_score, not at max_loops
+    local job_file
+    job_file=$(create_product_job "$jobs_dir" '.max_loops = 10')
+    local job_id
+    job_id=$(jq -r '.id' "$job_file")
+
+    local exit_code=0
+    CLAUDE_MOCK=true \
+    MOCK_SCORE_BEFORE="0.5000" \
+    MOCK_SCORE_AFTER="0.9500" \
+    HARNESS_DIR="$harness_dir" \
+    WORKSPACES_DIR="$workspaces_dir" \
+        timeout 120 bash "$harness_dir/scripts/run-job.sh" "$job_file" \
+        > "$test_dir/stdout.log" 2>&1 || exit_code=$?
+
+    local jsonl_file="$harness_dir/logs/${job_id}.jsonl"
+
+    # target_score_reached event must be logged
+    assert_file_contains "$jsonl_file" "target_score_reached" \
+        "target_score_reached event logged"
+
+    # Must have stopped well before max_loops=10
+    local final_loop
+    final_loop=$(jq -r '.loop_count // 0' "$job_file" 2>/dev/null)
+    if [[ "$final_loop" -lt 10 ]]; then
+        pass "stopped early on target score (loop=$final_loop < 10)"
+    else
+        fail "did not stop early (loop=$final_loop, expected < 10)"
+    fi
+
+    # consecutive_discard_stop must NOT fire (target_score fires first)
+    if ! grep -q "consecutive_discard_stop" "$jsonl_file" 2>/dev/null; then
+        pass "consecutive_discard_stop did NOT fire (target_score fired first)"
+    else
+        fail "consecutive_discard_stop fired — target_score stop did not take precedence"
+    fi
+
+    cleanup_test_env "$test_dir"
+}
+
+# ---------------------------------------------------------------------------
+# Test 11: Plateau stop — improvement < min_delta for max_plateau_loops → stop
+# ---------------------------------------------------------------------------
+test_plateau_stop() {
+    echo ""
+    echo "=== Test 11: Plateau Stop (no improvement for N loops → push) ==="
+    TESTS_RUN=$((TESTS_RUN + 1))
+
+    local test_dir
+    test_dir=$(setup_test_env "plateau_stop")
+    local harness_dir="$test_dir/harness"
+    local workspaces_dir="$test_dir/workspaces"
+    local jobs_dir="$harness_dir/jobs"
+
+    # Default PROGRAM.md: min_improvement_delta=0.01, max_plateau_loops=2, max_discards=3
+    # SCORE_BEFORE=SCORE_AFTER=0.5000 → improvement=0.00 < 0.01 → plateau after 2 loops
+    # plateau fires at PLATEAU_COUNT=2, before consecutive_discards reaches 3
+    local job_file
+    job_file=$(create_product_job "$jobs_dir" '.max_loops = 10')
+    local job_id
+    job_id=$(jq -r '.id' "$job_file")
+
+    local exit_code=0
+    CLAUDE_MOCK=true \
+    MOCK_SCORE_BEFORE="0.5000" \
+    MOCK_SCORE_AFTER="0.5000" \
+    HARNESS_DIR="$harness_dir" \
+    WORKSPACES_DIR="$workspaces_dir" \
+        timeout 120 bash "$harness_dir/scripts/run-job.sh" "$job_file" \
+        > "$test_dir/stdout.log" 2>&1 || exit_code=$?
+
+    local jsonl_file="$harness_dir/logs/${job_id}.jsonl"
+
+    # plateau_stop event must be logged
+    assert_file_contains "$jsonl_file" "plateau_stop" "plateau_stop event logged"
+
+    # Must have stopped at or before loop 3 (plateau fires at 2, before discard limit of 3)
+    local final_loop
+    final_loop=$(jq -r '.loop_count // 0' "$job_file" 2>/dev/null)
+    if [[ "$final_loop" -le 3 ]]; then
+        pass "plateau stopped early (loop=$final_loop <= 3)"
+    else
+        fail "plateau did not stop in time (loop=$final_loop, expected <= 3)"
+    fi
+
+    # consecutive_discard_stop must NOT fire (plateau fires first at loop 2)
+    if ! grep -q "consecutive_discard_stop" "$jsonl_file" 2>/dev/null; then
+        pass "consecutive_discard_stop did NOT fire (plateau fired first)"
+    else
+        fail "consecutive_discard_stop fired — plateau stop did not take precedence"
+    fi
+
+    cleanup_test_env "$test_dir"
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 main() {
@@ -797,6 +910,8 @@ main() {
     test_consecutive_discard_stop
     test_composite_score
     test_program_md_loaded
+    test_target_score_stop
+    test_plateau_stop
 
     echo ""
     echo "============================================"
