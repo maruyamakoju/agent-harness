@@ -1,0 +1,71 @@
+{
+  "days": [
+    {
+      "day": 0,
+      "name": "Scaffold",
+      "goals": [
+        "Initialize project structure",
+        "Set up package manager and dependencies",
+        "Create data model / schema",
+        "Establish test infrastructure",
+        "Basic CI configuration"
+      ],
+      "max_loops": 50,
+      "quality_gates": [
+        "Project builds successfully",
+        "Test suite runs (even if empty)",
+        "Linter passes"
+      ]
+    },
+    {
+      "day": 1,
+      "name": "Vertical Slice",
+      "goals": [
+        "Core feature implementation",
+        "API endpoints for primary use case",
+        "Basic UI/interface for main workflow",
+        "Integration tests for core flow"
+      ],
+      "max_loops": 150,
+      "quality_gates": [
+        "Core feature works end-to-end",
+        "Test coverage > 60%",
+        "No critical lint errors"
+      ]
+    },
+    {
+      "day": 2,
+      "name": "Expansion",
+      "goals": [
+        "Secondary features",
+        "Error handling and edge cases",
+        "User-facing polish",
+        "Additional test coverage"
+      ],
+      "max_loops": 200,
+      "quality_gates": [
+        "All planned features implemented",
+        "Test coverage > 80%",
+        "No lint errors"
+      ]
+    },
+    {
+      "day": 3,
+      "name": "Hardening",
+      "goals": [
+        "Security review and fixes",
+        "Performance optimization",
+        "Documentation",
+        "Deployment configuration",
+        "Final test pass"
+      ],
+      "max_loops": 100,
+      "quality_gates": [
+        "Security scan clean",
+        "All tests pass",
+        "Documentation complete",
+        "Build/deploy works"
+      ]
+    }
+  ]
+}

@@ -1,53 +1,115 @@
 # Progress Log
-## Task: Full Refactor + RevenueCat Application Strengthening
-## Status: COMPLETED (pushed: db3377c)
+## Task: Product Forge Implementation — All 6 Phases
+## Status: IN_PROGRESS (v0.4 — mock-testable product loop)
 
-### Completed
+### Round 14: Product Forge (v0.3 Prototype)
 
-#### Phase 0: Security Hotfixes
-- [x] S1: block-dangerous.sh — Docker allow list (ps/logs/inspect/images already permitted; added set -euo pipefail)
-- [x] S2: run-job.sh — changed `set -uo pipefail` → `set -euo pipefail`; notify.sh same fix
-- [x] S3: block-dangerous.sh pattern hardening:
-  - Backtick/subshell RCE bypass fixed: `sh \`curl...\`` pattern added
-  - sudo( no-space bypass fixed: pattern updated to `[\s\(](sudo|doas|pkexec)[\s\(]`
-  - Download+chmod bypass: now catches `chmod 755` (octal) not just `+x`
-  - `rm -rf $HOME` variants added (--recursive --force flags)
-  - New blocked patterns: `python -m http.server`, `python -m SimpleHTTPServer`, `strace`, `ltrace`, `git config core.hooksPath`, `git config core.fsmonitor`, `pip install --index-url` from non-official index
+#### Phase 1: Product Mode Job Type (MVP Core) — FUNCTIONAL
+- [x] 1.1: create-job.sh — added --mode, --product-name, --max-loops, --day-plan, --create-repo flags (+77 lines)
+- [x] 1.2: templates/product-state/ — 9 template files (AGENT.md, PROGRESS.md, FEATURES.md, DECISIONS.md, RUNBOOK.md, init.sh, TASKS/, SPECS/, EVALS/)
+- [x] 1.2: examples/sample-product-job.json + templates/day-plans/default-3day.json
+- [x] 1.3: run-job.sh — product loop with SCAFFOLD, SYNC, INIT_SH, PLAN, CODE, TEST, LOOP_CHECK states (+562 lines)
+- [x] 1.3: run-job.sh — CREATE_REPO state for --create-repo (gh repo create)
+- [x] 1.4: dashboard/app.py — mode field in POST /api/jobs, state-files/day-progress/evals endpoints (+150 lines)
+- [x] 1.4: index.html — Product Forge tab with state file viewer
+- [x] 1.5: 42 new tests for product mode (215 total, 84% coverage)
 
-#### Phase 1: Shell Script Reliability
-- [x] R1: Already done in previous rounds (trap cleanup EXIT + rm -f in cleanup function)
-- [x] R2: create-job.sh — atomic write via .tmp then mv
-- [x] R3: run-job.sh — JSON validation with `jq empty` before parsing fields
-- [x] R4: github-issue-handler.sh — replaced sed/grep/xargs with awk for robust field extraction (handles colons in values like URLs, image:tag)
-- [x] R5: notify.sh — added `--fail` and `--max-time 10` to curl calls, error logging to stderr
-- [x] R6: Already done in previous rounds (atomic tmp→rename in cancel-job.sh)
+##### Post-review fixes (v0.3.1)
+- [x] Fix: ForgeTab JS initialization order — const moved before IIFE
+- [x] Fix: Split state_plan() into PLAN (select task only) + CODE (implement only) + shared build_product_context()
+- [x] Fix: persist_loop_state() — saves current_day, loop_count, last_state to job JSON for crash recovery
+- [x] Fix: Hook paths — changed /harness/hooks/ to relative `bash hooks/` (works in both Docker and local)
 
-#### Phase 2: Dashboard Code Quality
-- [x] D1: Notification factory — `_send_channel_notification()` helper; api_notify_test reduced from 60→25 lines
-- [x] D2: Request logging middleware — `@app.before_request`/`@app.after_request` JSON structured logs
-- [x] D3: Bounded LRU cache — `_cache_set()` with max 1000 entries; prevents memory growth on long-running instances
-- [x] D4: Unified API response — `_api_response()` wrapper with `{"success":true,"data":...,"ts":...}`; `?format=legacy` for backward compat
-- [x] D5: Activity cache — 10s TTL for `/api/activity` endpoint
+##### CLAUDE_MOCK + E2E tests (v0.4)
+- [x] State-dependent CLAUDE_MOCK in invoke_claude() — per-state file manipulation (SCAFFOLD/PLAN/CODE/TEST/INIT)
+- [x] Mock controls: MOCK_SCAFFOLD_FAIL, MOCK_PLAN_ALL_DONE, MOCK_TEST_FAIL_COUNT, MOCK_FIRST_CODE_PLANTS_FAIL
+- [x] Mock-mode workspace preservation (cleanup skips rm in mock mode)
+- [x] Mock-mode push skip (PUSH → DONE without git push)
+- [x] 4 E2E shell tests (tests/test-product-loop-e2e.sh): normal flow, failure recovery, cancel safety, persist state
+- [x] All 27 E2E assertions pass, all 215 dashboard tests pass
+- [x] CI: E2E tests added to .github/workflows/ci.yml
 
-#### Phase 3: New High-Value Features
-- [x] F1: RevenueCat MCP — added to `.claude/mcp_servers.json` (https://mcp.revenuecat.ai/mcp), REVENUECAT_API_KEY in .env.example, guidance in CLAUDE.md
-- [x] F2: Prometheus `/metrics` endpoint — text/plain; version=0.0.4 with agent_jobs_total, agent_cost_total, agent_alive, agent_job_duration_avg_seconds; cached 15s
-- [x] F3: Batch API — `POST /api/jobs/batch` (max 50 jobs/request, partial error reporting)
-- [x] F4: Webhook management — `GET/POST /api/webhooks`, `DELETE /api/webhooks/:id`, config/webhooks.json
-- [x] F5: API versioning — `/api/v1/` Blueprint (jobs, status, batch, health, metrics, cancel)
+#### Phase 2: Subagent Roles & Quality Gates — SCAFFOLDED
+- [x] 2.1: prompts/ — 9 role files (planner, explorer, implementer, test-writer, validator, debugger, security-reviewer, perf-reviewer, release-agent)
+- [x] 2.2: invoke_claude() role parameter with prompt prefix injection
+- [x] 2.3: hooks/post-edit-lint.sh (PostToolUse, informational)
+- [x] 2.3: hooks/pre-commit-gate.sh (PreCommit, blocking)
+- [x] 2.3: hooks/post-failure-log.sh (PostFailure, informational)
+- [x] 2.3: .claude/settings.json — PostToolUse hook configuration
+- [ ] TODO: Per-role tool allowlists (roles currently only prepend prompt, no tool filtering)
+- [ ] TODO: Per-role cost/time tracking
 
-#### Phase 4: Infrastructure Hardening
-- [x] I1: CI security scans — hadolint Dockerfile linting + Trivy vulnerability scan added to docker-build job
-- [x] I2: Log rotation — `logging: json-file max-size:100m max-file:5` on agent container; 50m/3 on dashboard
-- [x] I3: Coverage threshold raised from 60% → 75% in CI; actual coverage: 83%
-- [x] I4: README — MCP Server Integration, RevenueCat Integration, and Security Guide sections added
+#### Phase 3: 3-Day Plan Engine — SCAFFOLDED
+- [x] 3.1: templates/day-plans/default-3day.json (4-day schema)
+- [x] 3.2: LOOP_CHECK day boundary logic with day_max_loops and day transition
+- [x] 3.3: GET /api/jobs/<id>/day-progress endpoint + dashboard UI
+- [ ] TODO: Day boundary should use quality gates, not just loop counts
 
-#### Phase 5: RevenueCat Content Pipeline
-- [x] C1: auto-queue-config.example.json — 3 RevenueCat tutorial job templates added
-- [x] C2: application-letter.md — updated with Prometheus endpoint, batch API, webhook system, RevenueCat MCP integration; test count updated to 173
+#### Phase 4: Evaluation Framework — SCAFFOLDED
+- [x] 4.1: scripts/run-evals.sh — unit, lint, typecheck, security-scan, perf-benchmark
+- [x] 4.2: PLAN phase reads EVALS/ for eval-driven priority adjustment
+- [x] 4.3: GET /api/jobs/<id>/evals endpoint
+- [ ] TODO: Not tested with real product loop
+
+#### Phase 5: Execution Plane — CONFIG ONLY
+- [x] 5.1: deploy/agent-forge.service (systemd with 64GB memory, 80% CPU, exponential backoff)
+- [x] 5.2: scripts/tmux-forge.sh (4-pane session: loop, dashboard, events, monitor)
+- [x] 5.3: docker-compose.forge.yml (persistent workspaces, resource limits)
+
+#### Phase 6: OpenClaw Control Plane — FROZEN (scaffolded YAML only)
+- [x] 6.1: openclaw/docker-compose.openclaw.yml + gateway-config.yaml
+- [x] 6.2: 8 typed tool definitions — 5 backed by existing API, 3 have NO backend (set-priority, pause-resume, daily-summary)
+- [x] 6.4: Cron schedules (daily summary, health audit, log rotation, metrics)
+- [ ] FROZEN: No gateway process, no chat integration, 3 tools reference non-existent endpoints
+
+### Metrics
+- **New files**: 38 (37 original + 1 openclaw/STATUS.md)
+- **Modified files**: 7 (create-job.sh, run-job.sh, app.py, test_dashboard.py, index.html, settings.json, ci.yml)
+- **Tests**: 215 passed (was 173), 84% coverage (was 78%)
+- **Backward compatibility**: 100% (all 173 original tests pass unchanged)
+
+### Known Issues (from review)
+- ~~No E2E tests for run-job.sh product loop itself~~ → DONE (4 E2E tests, 27 assertions)
+- Role system is prompt-prefix only (no tool allowlist per role, no cost tracking)
+- Day boundaries use loop count, not quality gates
+- OpenClaw 3/8 tools have no backend endpoint
+- run-evals.sh not tested with real product workspace
+- Need real product loop smoke test (5 loops with real Claude) to validate prompt engineering
+
+##### Real Claude 5-loop test (v0.4.1)
+- [x] Fix: unset CLAUDECODE for nested session support
+- [x] Fix: PUSH skips gracefully when no remote origin exists
+- [x] Fix: PRESERVE_WORKSPACE=true env var to keep workspace for inspection
+- [x] Real Claude test completed: 2 loops, 4 commits, 22 tests, exit 0
+- [x] Harness verification: state transitions, persist, test-failure-recovery, push-skip all working
+- [ ] Prompt issue: CODE implements all features in 1 loop instead of 1 feature per loop
+
+### Real Claude 5-loop Results
+- **Total time**: 6m11s (372s)
+- **Loops**: 2 (PLAN detected all-done at loop 2)
+- **Commits**: 4 (scaffold init, scaffold customize, app stub, full CRUD impl)
+- **Tests written by Claude**: 22 (all pass)
+- **Test failure recovery**: worked (loop 1 test failed, fix agent ran, re-test passed)
+- **PROGRESS.md**: intact, well-structured, updated each loop
+- **FEATURES.md**: 17 features, all done
+- **Prompt issue**: CODE prompt says "implement ONLY Current Focus" but Claude implemented everything
+
+### Failure Classification
+| Category | Issue | Severity |
+|----------|-------|----------|
+| **prompt** | CODE implements all features in 1 loop, not 1-per-loop | Medium |
+| **state** | (none found) | - |
+| **harness** | (none found — push-skip fix resolved the only issue) | - |
+
+### Next Steps
+1. Strengthen CODE prompt to enforce 1-feature-per-loop discipline
+2. Consider: is 1-feature-per-loop actually desirable for small products?
+3. Run 5-loop test with a harder product (more features, multi-file)
+4. Day boundary / quality gate redesign (after more data)
 
 ### Notes
-- CI concurrency group added to prevent duplicate runs
-- timeout-minutes: 15 on all three CI jobs
-- `Path.replace()` used instead of `Path.rename()` for Windows compatibility in webhooks
-- 173 tests pass, 83% coverage (target: 75%)
+- MODE defaults to "job" — complete backward compatibility
+- Product state files (PROGRESS.md, FEATURES.md, etc.) live in the target repo git history
+- OpenClaw is frozen — core + execution must be stable first
+- Role selection via prompt prefix injection (no separate CLI processes)
+- This is "promising v0.3" — not yet production-ready

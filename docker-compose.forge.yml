@@ -1,0 +1,53 @@
+# docker-compose.forge.yml
+# Product Forge override — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.forge.yml up
+#
+# Extends the base agent-harness configuration for long-running product builds.
+
+services:
+  agent:
+    environment:
+      - MODE=product
+      - MAX_PARALLEL_JOBS=1
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-claude-sonnet-4-6}
+      # Product mode uses longer time budgets
+      - TIME_BUDGET=${TIME_BUDGET:-259200}
+      # Workspace persistence (product workspaces are not ephemeral)
+      - WORKSPACE_PERSIST=true
+    volumes:
+      # Persistent workspace volume for product builds
+      - forge-workspaces:/workspaces
+      # Mount templates into the container
+      - ./templates:/harness/templates:ro
+      # Mount prompts into the container
+      - ./prompts:/harness/prompts:ro
+    deploy:
+      resources:
+        limits:
+          memory: 64G
+          cpus: "8"
+        reservations:
+          memory: 4G
+          cpus: "2"
+    healthcheck:
+      test: ["CMD", "test", "-f", "/harness/logs/heartbeat.json"]
+      interval: 120s
+      timeout: 30s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  dashboard:
+    environment:
+      - WORKSPACES_DIR=/workspaces
+    volumes:
+      # Share workspace volume so dashboard can read state files
+      - forge-workspaces:/workspaces:ro
+
+volumes:
+  forge-workspaces:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${FORGE_WORKSPACE_PATH:-/opt/forge-workspaces}

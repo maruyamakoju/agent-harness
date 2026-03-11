@@ -1,0 +1,10 @@
+name: get-features
+description: Get the FEATURES.md tracker for a product mode job
+method: GET
+endpoint: /api/jobs/{job_id}/state-files
+parameters:
+  - name: job_id
+    type: string
+    required: true
+    description: The ID of the job
+response_filter: ".state_files[\"FEATURES.md\"]"

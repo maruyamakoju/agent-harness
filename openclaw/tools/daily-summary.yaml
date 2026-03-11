@@ -1,0 +1,33 @@
+name: daily-summary
+status: scaffolded  # TODO: requires orchestration layer to compose multiple API calls
+description: |
+  [SCAFFOLDED — requires gateway orchestration to compose state-files + day-progress + evals]
+  Generate a daily summary of product forge activity.
+  Collects: completed features, failed attempts, current progress, next steps.
+  Used by cron (daily 8am) and on-demand via chat.
+method: GET
+endpoint: /api/jobs
+parameters:
+  - name: status
+    type: string
+    default: running
+    description: Filter to running product jobs
+post_processing: |
+  For each running product job:
+  1. Fetch /api/jobs/{id}/state-files → extract PROGRESS.md summary
+  2. Fetch /api/jobs/{id}/day-progress → current day and loop count
+  3. Fetch /api/jobs/{id}/evals → latest eval results
+  4. Compile into a human-readable summary
+output_format: |
+  ## Daily Summary ({date})
+
+  ### {product_name}
+  - **Day**: {current_day} / 3
+  - **Loops**: {loop_count} / {max_loops}
+  - **Features Done**: {done_count} / {total_count}
+  - **Last Activity**: {last_event}
+  - **Evals**: {test_status}, {lint_status}
+  - **Next**: {next_task}
+notifications:
+  - telegram
+  - discord

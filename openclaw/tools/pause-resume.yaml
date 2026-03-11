@@ -1,0 +1,20 @@
+name: pause-resume
+status: scaffolded  # TODO: resume (re-queue) not yet implemented; cancel works via existing endpoint
+description: |
+  [SCAFFOLDED — pause works via cancel, resume (re-queue) not yet implemented]
+  Pause or resume the agent for a specific job.
+method: POST
+endpoint: /api/jobs/{job_id}/cancel
+parameters:
+  - name: job_id
+    type: string
+    required: true
+    description: The ID of the job to pause/resume
+  - name: action
+    type: string
+    enum: [pause, resume]
+    required: true
+    description: Whether to pause or resume the agent
+notes: |
+  Pause: sets cancelled=true flag on the job (agent stops at next check)
+  Resume: creates a new job with the same config (re-queue)

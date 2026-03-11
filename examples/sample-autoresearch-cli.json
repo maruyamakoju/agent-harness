@@ -1,0 +1,24 @@
+{
+  "id": "autoresearch-cli-taskman-001",
+  "repo": "local://create",
+  "base_ref": "main",
+  "work_branch": "forge/cli-taskman",
+  "task": "Build a CLI task manager called TaskForge in Python. Use typer for CLI, SQLite via sqlite3 stdlib for storage, rich for output formatting. The tool manages personal tasks with priorities, tags, due dates, and recurring schedules. Include pytest tests, ruff linting, and mypy type checking. The project should have a pyproject.toml with all tool configs.\n\nIMPORTANT: Use the following FEATURES.md EXACTLY as provided — do NOT modify, reorder, or add features:\n\n## F-001: Project scaffold with database schema\nCreate `src/taskforge/` package with `__init__.py`, `db.py`, `models.py`.\nSQLite database with `tasks` table: id (INTEGER PK), title (TEXT NOT NULL),\ndescription (TEXT), priority (INTEGER 1-4, default 2), status (TEXT: todo/doing/done),\ncreated_at (TEXT ISO8601), updated_at (TEXT ISO8601).\nInclude `db.py` with `get_connection()`, `init_db()`, and `tests/test_db.py`.\n\n## F-002: Add task command\n`taskforge add \"title\" --priority 2 --description \"desc\"`\nValidates: title non-empty, priority 1-4. Prints created task with rich Panel.\nTest: add succeeds, missing title errors, invalid priority errors.\n\n## F-003: List tasks command with table output\n`taskforge list` — shows all tasks in a rich Table (columns: ID, Title, Priority, Status, Created).\n`taskforge list --status done` — filter by status.\n`taskforge list --priority 1` — filter by priority.\nTest: list empty, list with data, filter by status, filter by priority.\n\n## F-004: Complete and delete commands\n`taskforge done <id>` — sets status to \"done\", prints confirmation.\n`taskforge delete <id>` — removes task, prints confirmation.\nBoth error on invalid ID (not found).\nTest: complete existing, complete missing, delete existing, delete missing.\n\n## F-005: Tag system\nNew `tags` table: task_id (FK), tag (TEXT). Composite unique on (task_id, tag).\n`taskforge add \"title\" --tag work --tag urgent` — attach tags on creation.\n`taskforge tag <id> <tag>` — add tag to existing task.\n`taskforge untag <id> <tag>` — remove tag.\n`taskforge list --tag work` — filter by tag.\nTest: add with tags, tag/untag, filter by tag.\n\n## F-006: Due dates and overdue detection\nAdd `due_date` column (TEXT ISO8601, nullable) to tasks table.\n`taskforge add \"title\" --due 2026-04-01`\n`taskforge list --overdue` — show tasks past due date.\n`taskforge list` — overdue tasks shown in red.\nDate validation: reject past dates on add, accept any format parseable by datetime.\nTest: add with due date, overdue filter, date validation, display coloring.\n\n## F-007: Edit and status transitions\n`taskforge edit <id> --title \"new\" --priority 3 --description \"new desc\" --due 2026-05-01`\nAt least one field required. Updates `updated_at`.\n`taskforge start <id>` — sets status to \"doing\".\nStatus transitions enforced: todo->doing->done (no skipping, no backwards).\nTest: edit fields, status transitions valid/invalid, updated_at changes.\n\n## F-008: Statistics and summary view\n`taskforge stats` — shows total tasks by status, priority breakdown, overdue count, tags frequency (top 5), completion rate.\nOutput as rich Panel with formatted sections.\nTest: stats with empty db, stats with mixed data, completion rate math.\n\n## F-009: Export and import (JSON)\n`taskforge export --format json > tasks.json` — exports all tasks with tags.\n`taskforge import tasks.json` — imports tasks, skips duplicates by title.\nTest: export round-trip, import duplicates skipped, invalid JSON errors.\n\n## F-010: Configuration file\n`~/.taskforge/config.toml` with defaults: default_priority, date_format, db_path, color_theme.\n`taskforge config show` and `taskforge config set key value`.\nConfig loaded at startup, merged with CLI args (CLI wins).\nTest: default config creation, config set/get, CLI override.",
+  "time_budget_sec": 10800,
+  "mode": "product",
+  "product_name": "TaskForge CLI",
+  "max_loops": 5,
+  "create_repo": true,
+  "commands": {
+    "setup": [
+      "python -m pip install typer rich pytest ruff mypy pip-audit",
+      "printf '[project]\\nname = \"taskforge\"\\nversion = \"0.1.0\"\\nrequires-python = \">=3.11\"\\n\\n[tool.ruff]\\nline-length = 88\\nselect = [\"E\", \"F\", \"W\", \"I\"]\\n\\n[tool.mypy]\\nstrict = true\\nwarn_return_any = true\\nwarn_unused_configs = true\\n\\n[tool.pytest.ini_options]\\ntestpaths = [\"tests\"]\\n' > pyproject.toml"
+    ],
+    "test": [
+      "python -m pytest tests/ -v --tb=short",
+      "python -m ruff check .",
+      "python -m mypy src/ --ignore-missing-imports"
+    ]
+  },
+  "day_plan": null
+}

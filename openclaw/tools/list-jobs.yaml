@@ -1,0 +1,19 @@
+name: list-jobs
+description: List all jobs in the harness with optional status filter
+method: GET
+endpoint: /api/jobs
+parameters:
+  - name: status
+    type: string
+    enum: [all, pending, running, done, failed]
+    default: all
+    description: Filter by job status
+  - name: page
+    type: integer
+    default: 1
+    description: Page number for pagination
+  - name: per_page
+    type: integer
+    default: 50
+    maximum: 200
+    description: Results per page

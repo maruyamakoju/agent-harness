@@ -1,0 +1,47 @@
+name: submit-job
+description: Submit a new job to the Product Forge harness
+method: POST
+endpoint: /api/jobs
+parameters:
+  - name: repo
+    type: string
+    required: true
+    description: Git repository URL (SSH or HTTPS)
+  - name: task
+    type: string
+    required: true
+    description: Task description for the agent
+  - name: mode
+    type: string
+    enum: [job, product]
+    default: job
+    description: Execution mode
+  - name: product_name
+    type: string
+    required_if: mode=product
+    description: Product name (required for product mode)
+  - name: max_loops
+    type: integer
+    default: 10
+    description: Maximum loop iterations
+  - name: setup
+    type: array
+    items: string
+    description: Setup commands to run before coding
+  - name: test
+    type: array
+    items: string
+    description: Test commands to verify changes
+  - name: priority
+    type: integer
+    minimum: 1
+    maximum: 5
+    default: 3
+    description: "Job priority: 1=urgent, 5=lowest"
+  - name: day_plan
+    type: object
+    description: Day plan configuration (product mode)
+  - name: create_repo
+    type: boolean
+    default: false
+    description: Create a new repository instead of cloning

@@ -22,6 +22,13 @@ TEST_CMDS='[]'
 DRY_RUN=false
 EXPIRES_IN=""   # minutes; empty = no expiry
 
+# Product mode defaults
+MODE="job"              # job | product
+PRODUCT_NAME=""
+MAX_LOOPS=""            # empty = use mode default (job=10, product=500)
+DAY_PLAN=""             # path to day-plan JSON
+CREATE_REPO=false       # create new repo instead of cloning
+
 # ---------------------------------------------------------------------------
 # Usage
 # ---------------------------------------------------------------------------
@@ -46,6 +53,13 @@ Optional:
   --test <cmd>          Test command (can be repeated)
   --expires-in <min>    Auto-fail the job after <min> minutes from now
   --dry-run             Print the job JSON without writing the file
+
+Product Mode:
+  --mode <job|product>  Execution mode (default: job)
+  --product-name <name> Product name (required for product mode)
+  --max-loops <n>       Max loop iterations (job=10, product=500)
+  --day-plan <path>     Path to day-plan JSON (product mode)
+  --create-repo         Create a new repository instead of cloning
 
 Examples:
   create-job.sh --repo git@github.com:org/repo.git \\
@@ -85,6 +99,11 @@ while [[ $# -gt 0 ]]; do
         --test)         TEST_ARRAY+=("$2"); shift 2 ;;
         --expires-in)   EXPIRES_IN="$2"; shift 2 ;;
         --dry-run)      DRY_RUN=true; shift ;;
+        --mode)         MODE="$2"; shift 2 ;;
+        --product-name) PRODUCT_NAME="$2"; shift 2 ;;
+        --max-loops)    MAX_LOOPS="$2"; shift 2 ;;
+        --day-plan)     DAY_PLAN="$2"; shift 2 ;;
+        --create-repo)  CREATE_REPO=true; shift ;;
         -h|--help)  usage ;;
         *)          echo "Unknown option: $1"; usage ;;
     esac
@@ -115,6 +134,41 @@ if [[ -n "$ISSUE_NUMBER" ]] && ! [[ "$ISSUE_NUMBER" =~ ^[0-9]+$ ]]; then
 fi
 if [[ -n "$EXPIRES_IN" ]] && ! [[ "$EXPIRES_IN" =~ ^[0-9]+$ ]]; then
     echo "Error: --expires-in must be a non-negative integer in minutes (got: '$EXPIRES_IN')"
+    usage
+fi
+
+# Validate mode
+if [[ "$MODE" != "job" && "$MODE" != "product" ]]; then
+    echo "Error: --mode must be 'job' or 'product' (got: '$MODE')"
+    usage
+fi
+
+# Product mode validations
+if [[ "$MODE" == "product" ]]; then
+    if [[ -z "$PRODUCT_NAME" ]]; then
+        echo "Error: --product-name is required when --mode is 'product'"
+        usage
+    fi
+fi
+
+# Validate max-loops if provided
+if [[ -n "$MAX_LOOPS" ]] && ! [[ "$MAX_LOOPS" =~ ^[0-9]+$ ]]; then
+    echo "Error: --max-loops must be a non-negative integer (got: '$MAX_LOOPS')"
+    usage
+fi
+
+# Set default max_loops based on mode
+if [[ -z "$MAX_LOOPS" ]]; then
+    if [[ "$MODE" == "product" ]]; then
+        MAX_LOOPS=500
+    else
+        MAX_LOOPS=10
+    fi
+fi
+
+# Validate day-plan file exists if provided
+if [[ -n "$DAY_PLAN" && ! -f "$DAY_PLAN" && "$DRY_RUN" == "false" ]]; then
+    echo "Error: --day-plan file not found: '$DAY_PLAN'"
     usage
 fi
 
@@ -158,6 +212,28 @@ if [[ -n "$ISSUE_NUMBER" ]]; then
         '{issue_number: $num, issue_repo: $repo}')
 fi
 
+# Build product mode fields
+PRODUCT_FIELDS=""
+if [[ "$MODE" == "product" ]]; then
+    # Read day_plan content if provided
+    local_day_plan="null"
+    if [[ -n "$DAY_PLAN" && -f "$DAY_PLAN" ]]; then
+        local_day_plan=$(cat "$DAY_PLAN")
+    fi
+    PRODUCT_FIELDS=$(jq -n \
+        --arg mode "$MODE" \
+        --arg pname "$PRODUCT_NAME" \
+        --argjson loops "$MAX_LOOPS" \
+        --argjson create_repo "$CREATE_REPO" \
+        --argjson day_plan "$local_day_plan" \
+        '{mode: $mode, product_name: $pname, max_loops: $loops, create_repo: $create_repo, day_plan: $day_plan}')
+else
+    PRODUCT_FIELDS=$(jq -n \
+        --arg mode "$MODE" \
+        --argjson loops "$MAX_LOOPS" \
+        '{mode: $mode, max_loops: $loops}')
+fi
+
 # Compute expires_at if --expires-in was provided
 EXPIRES_FIELDS=""
 if [[ -n "$EXPIRES_IN" && "$EXPIRES_IN" -gt 0 ]]; then
@@ -186,6 +262,7 @@ JOB_JSON=$(jq -n \
     --argjson priority "$PRIORITY" \
     --argjson issue "${ISSUE_FIELDS:-null}" \
     --argjson expires "${EXPIRES_FIELDS:-null}" \
+    --argjson product "${PRODUCT_FIELDS:-null}" \
     '{
         id: $id,
         repo: $repo,
@@ -202,7 +279,8 @@ JOB_JSON=$(jq -n \
         priority: $priority,
         created_at: (now | todate)
     } + (if $issue   != null then $issue   else {} end)
-      + (if $expires != null then $expires else {} end)')
+      + (if $expires != null then $expires else {} end)
+      + (if $product != null then $product else {} end)')
 
 if [[ "$DRY_RUN" == "true" ]]; then
     echo "[DRY RUN] Job would be created (not written to disk):"

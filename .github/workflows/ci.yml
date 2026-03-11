@@ -39,6 +39,11 @@ jobs:
             echo "  $f"
             jq . "$f" > /dev/null
           done
+          echo "Checking day plan templates..."
+          for f in templates/day-plans/*.json; do
+            echo "  $f"
+            jq . "$f" > /dev/null
+          done
           echo "All JSON valid."
 
       - name: Test hook script - should block dangerous commands
@@ -168,6 +173,65 @@ jobs:
             exit 1
           fi
           echo "expires_at = $EXPIRES_AT"
+
+          # Test --mode product
+          export HARNESS_DIR4=$(mktemp -d)
+          mkdir -p $HARNESS_DIR4/jobs/pending
+          HARNESS_DIR=$HARNESS_DIR4 scripts/create-job.sh \
+            --repo "git@github.com:test/product.git" \
+            --task "Build a SaaS app" \
+            --mode product \
+            --product-name "Test SaaS" \
+            --max-loops 100
+          PRODUCT_FILE=$(find $HARNESS_DIR4/jobs/pending -name "*.json" | head -1)
+          if [ -z "$PRODUCT_FILE" ]; then
+            echo "FAIL: No product job file created"
+            exit 1
+          fi
+          echo "Product job file: $PRODUCT_FILE"
+          jq . "$PRODUCT_FILE"
+
+          # Validate product mode fields
+          MODE=$(jq -r '.mode' "$PRODUCT_FILE")
+          PNAME=$(jq -r '.product_name' "$PRODUCT_FILE")
+          MLOOPS=$(jq -r '.max_loops' "$PRODUCT_FILE")
+          if [ "$MODE" != "product" ]; then
+            echo "FAIL: mode should be 'product' (got: $MODE)"
+            exit 1
+          fi
+          if [ "$PNAME" != "Test SaaS" ]; then
+            echo "FAIL: product_name should be 'Test SaaS' (got: $PNAME)"
+            exit 1
+          fi
+          if [ "$MLOOPS" != "100" ]; then
+            echo "FAIL: max_loops should be 100 (got: $MLOOPS)"
+            exit 1
+          fi
+          echo "Product mode fields validated."
+
+          # Test --mode job (default backward compat)
+          export HARNESS_DIR5=$(mktemp -d)
+          mkdir -p $HARNESS_DIR5/jobs/pending
+          HARNESS_DIR=$HARNESS_DIR5 scripts/create-job.sh \
+            --repo "git@github.com:test/repo.git" \
+            --task "Standard job"
+          JOB_FILE5=$(find $HARNESS_DIR5/jobs/pending -name "*.json" | head -1)
+          JOB_MODE=$(jq -r '.mode' "$JOB_FILE5")
+          JOB_LOOPS=$(jq -r '.max_loops' "$JOB_FILE5")
+          if [ "$JOB_MODE" != "job" ]; then
+            echo "FAIL: default mode should be 'job' (got: $JOB_MODE)"
+            exit 1
+          fi
+          if [ "$JOB_LOOPS" != "10" ]; then
+            echo "FAIL: default max_loops should be 10 (got: $JOB_LOOPS)"
+            exit 1
+          fi
+          echo "Default job mode backward compat validated."
+
+      - name: E2E product loop tests (CLAUDE_MOCK)
+        run: |
+          chmod +x tests/test-product-loop-e2e.sh scripts/run-job.sh
+          bash tests/test-product-loop-e2e.sh
 
   dashboard-tests:
     runs-on: ubuntu-latest

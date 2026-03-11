@@ -1,0 +1,9 @@
+name: get-progress
+description: Get the current PROGRESS.md and state files for a product mode job
+method: GET
+endpoint: /api/jobs/{job_id}/state-files
+parameters:
+  - name: job_id
+    type: string
+    required: true
+    description: The ID of the job

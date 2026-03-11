@@ -1,0 +1,73 @@
+{
+  "id": "2026-03-10T120000Z-my-saas-app",
+  "repo": "git@github.com:myorg/my-saas-app.git",
+  "base_ref": "main",
+  "work_branch": "agent/product-forge-my-saas-app",
+  "task": "Build a complete SaaS billing dashboard with Stripe integration, user management, and analytics",
+  "commands": {
+    "setup": ["npm ci", "npx prisma migrate dev"],
+    "test": ["npm test", "npm run lint"]
+  },
+  "time_budget_sec": 259200,
+  "max_retries": 2,
+  "gpu_required": false,
+  "priority": 2,
+  "created_at": "2026-03-10T12:00:00Z",
+  "mode": "product",
+  "product_name": "SaaS Billing Dashboard",
+  "max_loops": 500,
+  "create_repo": false,
+  "day_plan": {
+    "days": [
+      {
+        "day": 0,
+        "name": "Scaffold",
+        "goals": [
+          "Initialize Next.js project with TypeScript",
+          "Set up Prisma ORM with PostgreSQL schema",
+          "Create basic auth with NextAuth.js",
+          "Establish test infrastructure (Jest + Playwright)"
+        ],
+        "max_loops": 50,
+        "quality_gates": ["npm test passes", "npm run lint passes", "Basic page renders"]
+      },
+      {
+        "day": 1,
+        "name": "Vertical Slice",
+        "goals": [
+          "Stripe integration (products, prices, subscriptions)",
+          "User dashboard with subscription status",
+          "Billing portal redirect",
+          "Webhook handler for Stripe events"
+        ],
+        "max_loops": 150,
+        "quality_gates": ["Stripe test mode checkout works", "Webhook signature verification", "80%+ test coverage"]
+      },
+      {
+        "day": 2,
+        "name": "Expansion",
+        "goals": [
+          "Analytics dashboard (MRR, churn, LTV)",
+          "Team management (invites, roles)",
+          "Email notifications (welcome, invoice, cancellation)",
+          "Admin panel"
+        ],
+        "max_loops": 200,
+        "quality_gates": ["All CRUD operations tested", "E2E tests for critical flows", "No lint errors"]
+      },
+      {
+        "day": 3,
+        "name": "Hardening",
+        "goals": [
+          "Security audit and fixes",
+          "Performance optimization",
+          "Documentation (README, API docs)",
+          "CI/CD pipeline",
+          "Docker deployment config"
+        ],
+        "max_loops": 100,
+        "quality_gates": ["Security scan clean", "Lighthouse score > 90", "Docker build succeeds", "All tests pass"]
+      }
+    ]
+  }
+}

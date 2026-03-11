@@ -1,0 +1,56 @@
+[Unit]
+Description=Product Forge - Autonomous Coding Agent (Product Mode)
+Documentation=https://github.com/your-org/agent-harness
+After=network-online.target docker.service
+Wants=network-online.target
+ConditionPathExists=/harness/scripts/agent-loop.sh
+
+[Service]
+Type=simple
+User=agent
+Group=agent
+WorkingDirectory=/harness
+
+# Environment
+EnvironmentFile=-/harness/.env
+Environment="HARNESS_DIR=/harness"
+Environment="WORKSPACES_DIR=/workspaces"
+Environment="DEFAULT_MODEL=claude-sonnet-4-6"
+Environment="MAX_PARALLEL_JOBS=1"
+
+# Resource limits (product mode uses more resources)
+MemoryMax=64G
+CPUQuota=80%
+TasksMax=512
+
+# Execution
+ExecStart=/harness/scripts/agent-loop.sh
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Restart policy: exponential backoff
+Restart=on-failure
+RestartSec=10
+RestartSteps=5
+RestartMaxDelaySec=300
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agent-forge
+
+# Timeout (product mode runs for days)
+TimeoutStartSec=60
+TimeoutStopSec=120
+
+# Watchdog: if agent-loop.sh doesn't heartbeat within 10 min, restart
+WatchdogSec=600
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/harness/jobs /harness/logs /harness/config /workspaces
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
