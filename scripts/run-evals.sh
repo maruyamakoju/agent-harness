@@ -163,10 +163,22 @@ run_security_scan() {
         output=$(npm audit --json 2>&1 | tail -50) || exit_code=$?
     elif command -v pip-audit &>/dev/null; then
         output=$(pip-audit 2>&1 | tail -30) || exit_code=$?
+    elif python -m pip_audit --version &>/dev/null 2>&1; then
+        # pip-audit not on PATH but importable as module (e.g. Windows Store Python)
+        echo "[eval] pip-audit command not on PATH, falling back to python -m pip_audit"
+        output=$(python -m pip_audit 2>&1 | tail -30) || exit_code=$?
+    elif python3 -m pip_audit --version &>/dev/null 2>&1; then
+        echo "[eval] pip-audit command not on PATH, falling back to python3 -m pip_audit"
+        output=$(python3 -m pip_audit 2>&1 | tail -30) || exit_code=$?
     elif command -v cargo-audit &>/dev/null; then
         output=$(cargo audit 2>&1 | tail -30) || exit_code=$?
     else
-        echo "[eval] No security scanner detected, skipping"
+        # Distinguish: installed but PATH issue vs genuinely not installed
+        if python -c "import pip_audit" 2>/dev/null || python3 -c "import pip_audit" 2>/dev/null; then
+            echo "[eval] pip_audit module found but not runnable — check Python version or PATH"
+        else
+            echo "[eval] No security scanner detected (pip-audit not installed), skipping"
+        fi
         return
     fi
 
