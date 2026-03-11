@@ -1708,9 +1708,12 @@ ${context}
    - Follow existing patterns and conventions
    - Handle edge cases
 3. Also write tests for the new code.
-4. Run the test commands to verify your changes work.
-5. If tests pass, commit with: \`<type>(<scope>): <description>\`
-6. If tests fail, debug and fix (max 3 attempts).
+4. Run the test commands to verify your changes work:
+   - **Lint first**: run \`python -m ruff check --fix .\` (or \`npm run lint\` etc.) and fix any remaining errors before committing. A lint failure lowers the composite score.
+   - **Tests**: run \`python -m pytest\` (or project-appropriate command) and ensure they pass.
+   - **Type check**: run \`python -m mypy src/\` (or \`tsc --noEmit\`) if applicable.
+5. If all checks pass, commit with: \`<type>(<scope>): <description>\`
+6. If checks fail, debug and fix (max 3 attempts per check).
    If still failing after 3 attempts, do NOT commit. Leave the code as-is.
 
 ## HARD MUTATION CAPS (enforced by CODE_AUDIT — violations = auto-discard)
