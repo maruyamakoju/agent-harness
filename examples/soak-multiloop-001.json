@@ -12,7 +12,7 @@
   "commands": {
     "setup": [
       "python -m pip install typer pytest ruff mypy pip-audit",
-      "printf '[project]\nname = \"todolist\"\nversion = \"0.1.0\"\nrequires-python = \">=3.11\"\n\n[tool.ruff]\nline-length = 88\nselect = [\"E\", \"F\", \"W\", \"I\"]\n\n[tool.mypy]\nstrict = true\nwarn_return_any = true\nwarn_unused_configs = true\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npythonpath = [\"src\"]\n' > pyproject.toml"
+      "printf '[project]\\nname = \"todolist\"\\nversion = \"0.1.0\"\\nrequires-python = \">=3.11\"\\n\\n[tool.ruff]\\nline-length = 88\\nselect = [\"E\", \"F\", \"W\", \"I\"]\\n\\n[tool.mypy]\\nstrict = true\\nwarn_return_any = true\\nwarn_unused_configs = true\\n\\n[tool.pytest.ini_options]\\ntestpaths = [\"tests\"]\\npythonpath = [\"src\"]\\n\\n' > pyproject.toml"
     ],
     "test": [
       "python -m pytest tests/ -v --tb=short",
