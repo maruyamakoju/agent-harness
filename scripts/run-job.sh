@@ -26,6 +26,19 @@ fi
 # Parse job JSON
 # ---------------------------------------------------------------------------
 JOB_ID=$(jq -r '.id' "$JOB_FILE")
+
+# ---------------------------------------------------------------------------
+# Parallel-run guard: one workspace per job ID at a time
+# ---------------------------------------------------------------------------
+LOCK_FILE="${WORKSPACES_DIR}/${JOB_ID}.lock"
+mkdir -p "$WORKSPACES_DIR"
+if [[ -f "$LOCK_FILE" ]]; then
+    echo "[ERROR] Job $JOB_ID is already running (lockfile: $LOCK_FILE). Aborting to prevent workspace corruption." >&2
+    exit 1
+fi
+touch "$LOCK_FILE"
+trap 'rm -f "$LOCK_FILE"' EXIT
+
 REPO=$(jq -r '.repo' "$JOB_FILE")
 BASE_REF=$(jq -r '.base_ref // "main"' "$JOB_FILE")
 WORK_BRANCH=$(jq -r '.work_branch' "$JOB_FILE")
@@ -2247,6 +2260,7 @@ cleanup() {
         fi
     fi
     rm -f "$ERROR_COUNTS_FILE"
+    rm -f "${LOCK_FILE:-}"
 }
 
 # =============================================================================
