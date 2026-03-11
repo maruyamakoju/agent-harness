@@ -11,7 +11,7 @@
   "create_repo": true,
   "commands": {
     "setup": [
-      "python -m pip install typer rich pytest ruff mypy",
+      "python -m pip install typer rich pytest ruff mypy pip-audit",
       "printf '[project]\\nname = \"taskforge\"\\nversion = \"0.1.0\"\\nrequires-python = \">=3.11\"\\n\\n[tool.ruff]\\nline-length = 88\\nselect = [\"E\", \"F\", \"W\", \"I\"]\\n\\n[tool.mypy]\\nstrict = true\\nwarn_return_any = true\\nwarn_unused_configs = true\\n\\n[tool.pytest.ini_options]\\ntestpaths = [\"tests\"]\\n' > pyproject.toml"
     ],
     "test": [
