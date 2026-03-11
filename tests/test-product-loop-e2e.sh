@@ -889,6 +889,73 @@ test_plateau_stop() {
     cleanup_test_env "$test_dir"
 }
 
+test_parallel_lock() {
+    echo ""
+    echo "=== Test 12: Parallel Lock (second run with same job ID exits 1) ==="
+    TESTS_RUN=$((TESTS_RUN + 1))
+
+    local test_dir
+    test_dir=$(setup_test_env "parallel_lock")
+    local harness_dir="$test_dir/harness"
+    local workspaces_dir="$test_dir/workspaces"
+    local jobs_dir="$harness_dir/jobs"
+
+    local job_file
+    job_file=$(create_product_job "$jobs_dir")
+    local job_id
+    job_id=$(jq -r '.id' "$job_file")
+
+    # Simulate a running job by placing the lockfile
+    local lock_file="$workspaces_dir/${job_id}.lock"
+    mkdir -p "$workspaces_dir"
+    touch "$lock_file"
+
+    # Second launch must exit 1 immediately with the "already running" message
+    local exit_code=0
+    local output
+    output=$(CLAUDE_MOCK=true \
+        HARNESS_DIR="$harness_dir" \
+        WORKSPACES_DIR="$workspaces_dir" \
+        bash "$harness_dir/scripts/run-job.sh" "$job_file" 2>&1) || exit_code=$?
+
+    if [[ $exit_code -eq 1 ]]; then
+        pass "second launch exited with code 1"
+    else
+        fail "second launch exit code was $exit_code, expected 1"
+    fi
+
+    if echo "$output" | grep -q "already running"; then
+        pass "second launch printed 'already running' message"
+    else
+        fail "second launch did not print 'already running' message (output: $output)"
+    fi
+
+    # Lockfile must still exist (was placed by us, not cleaned up by the failed launch)
+    if [[ -f "$lock_file" ]]; then
+        pass "lockfile preserved after aborted second launch"
+    else
+        fail "lockfile was unexpectedly removed by aborted launch"
+    fi
+
+    # Remove lockfile and verify a fresh launch can acquire it and cleans up on exit
+    rm -f "$lock_file"
+    local exit_code2=0
+    CLAUDE_MOCK=true \
+    MOCK_PLAN_ALL_DONE=true \
+    HARNESS_DIR="$harness_dir" \
+    WORKSPACES_DIR="$workspaces_dir" \
+        timeout 60 bash "$harness_dir/scripts/run-job.sh" "$job_file" \
+        > "$test_dir/stdout2.log" 2>&1 || exit_code2=$?
+
+    if [[ ! -f "$lock_file" ]]; then
+        pass "lockfile cleaned up after normal job exit"
+    else
+        fail "lockfile NOT cleaned up after normal job exit"
+    fi
+
+    cleanup_test_env "$test_dir"
+}
+
 # ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
@@ -912,6 +979,7 @@ main() {
     test_program_md_loaded
     test_target_score_stop
     test_plateau_stop
+    test_parallel_lock
 
     echo ""
     echo "============================================"
