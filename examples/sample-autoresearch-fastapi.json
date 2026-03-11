@@ -1,0 +1,24 @@
+{
+  "id": "autoresearch-fastapi-001",
+  "repo": "local://create",
+  "base_ref": "main",
+  "work_branch": "forge/fastapi-notes",
+  "task": "Build a FastAPI notes API in Python. Use FastAPI + Pydantic v2 for the API, SQLite via sqlite3 stdlib for storage. The API manages short text notes with tags. Include pytest tests (using httpx for API testing), ruff linting, and mypy type checking. The project should have a pyproject.toml with all tool configs.\n\nIMPORTANT: Use the following FEATURES.md EXACTLY as provided — do NOT modify, reorder, or add features:\n\n## F-001: Project scaffold with database schema\nCreate `src/notesapi/` package with `__init__.py`, `db.py`, `models.py`.\nSQLite database with `notes` table: id (INTEGER PK), title (TEXT NOT NULL),\nbody (TEXT NOT NULL), created_at (TEXT ISO8601), updated_at (TEXT ISO8601).\nInclude `db.py` with `get_connection()`, `init_db()`, and `tests/test_db.py` (3+ tests).\n\n## F-002: FastAPI app scaffold + GET /health\nCreate `src/notesapi/main.py` with FastAPI app instance.\n`GET /health` → `{\"status\": \"ok\", \"version\": \"0.1.0\"}`\nCreate `tests/test_health.py` using httpx.AsyncClient with ASGITransport.\nTest: 200 OK, JSON body matches.\n\n## F-003: POST /notes — create note\n`POST /notes` body: `{\"title\": str, \"body\": str}` → 201 Created, returns created note with id and timestamps.\nValidation: title and body must be non-empty (422 if empty).\n`GET /notes/{id}` → 200 with note, 404 if not found.\nTest: create succeeds, empty title 422, get existing, get missing 404.\n\n## F-004: GET /notes — list all notes\n`GET /notes` → 200, JSON array of all notes (id, title, body, created_at).\n`GET /notes?limit=10&offset=0` — pagination support.\nTest: empty list, list with items, pagination.\n\n## F-005: PUT /notes/{id} — update note\n`PUT /notes/{id}` body: `{\"title\": str, \"body\": str}` → 200, updated note.\nUpdates `updated_at`. 404 if not found. Validation same as POST.\nTest: update existing, update missing 404, partial validation.\n\n## F-006: DELETE /notes/{id}\n`DELETE /notes/{id}` → 204 No Content. 404 if not found.\nTest: delete existing (verify 404 after), delete missing.\n\n## F-007: Tag system\nNew `note_tags` table: note_id (FK), tag (TEXT). Unique (note_id, tag).\n`POST /notes` accepts optional `tags: list[str]`.\n`POST /notes/{id}/tags` body: `{\"tag\": str}` — add tag. 409 if duplicate.\n`DELETE /notes/{id}/tags/{tag}` — remove tag. 404 if not found.\n`GET /notes?tag=work` — filter notes by tag.\nTest: create with tags, add/remove tag, filter by tag.\n\n## F-008: Search\n`GET /notes/search?q=keyword` — case-insensitive search in title and body.\nReturns matching notes with pagination.\nTest: search finds matches, search no results, search is case-insensitive.",
+  "time_budget_sec": 10800,
+  "mode": "product",
+  "product_name": "FastAPI Notes API",
+  "max_loops": 5,
+  "create_repo": true,
+  "commands": {
+    "setup": [
+      "python -m pip install fastapi httpx anyio pydantic pytest ruff mypy pip-audit",
+      "printf '[project]\\nname = \"notesapi\"\\nversion = \"0.1.0\"\\nrequires-python = \">=3.11\"\\n\\n[tool.ruff]\\nline-length = 88\\nselect = [\"E\", \"F\", \"W\", \"I\"]\\n\\n[tool.mypy]\\nstrict = true\\nwarn_return_any = true\\nwarn_unused_configs = true\\n\\n[tool.pytest.ini_options]\\ntestpaths = [\"tests\"]\\nasyncio_mode = \"auto\"\\n' > pyproject.toml"
+    ],
+    "test": [
+      "python -m pytest tests/ -v --tb=short",
+      "python -m ruff check .",
+      "python -m mypy src/ --ignore-missing-imports"
+    ]
+  },
+  "day_plan": null
+}
