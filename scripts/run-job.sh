@@ -1401,8 +1401,9 @@ PROMPT
     fi
 
     # Apply job-defined PROGRAM.md override AFTER Claude (Claude may have reset it to template defaults)
+    # Use jq (not python3 open()) — jq handles Git Bash /c/... paths; python3 does not on Windows
     local job_program_md
-    job_program_md=$(python3 -c "import json,sys; d=json.load(open('$JOB_FILE')); print(d.get('program_md',''))" 2>/dev/null || echo "")
+    job_program_md=$(PATH="$HOME/bin:$PATH" jq -r '.program_md // empty' "$JOB_FILE" 2>/dev/null || echo "")
     if [[ -n "$job_program_md" ]]; then
         echo "$job_program_md" > "$WORKSPACE/PROGRAM.md"
         log "INFO" "SCAFFOLD: applied job-defined PROGRAM.md (custom caps)"
