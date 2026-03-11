@@ -6,7 +6,9 @@
 # =============================================================================
 set -euo pipefail
 
+# Resolve to absolute path so persist_loop_state() works after cd "$WORKSPACE"
 JOB_FILE="$1"
+[[ "$JOB_FILE" != /* ]] && JOB_FILE="$(pwd)/$JOB_FILE"
 HARNESS_DIR="${HARNESS_DIR:-/harness}"
 LOGS_DIR="${HARNESS_DIR}/logs"
 SCRIPTS_DIR="${HARNESS_DIR}/scripts"
