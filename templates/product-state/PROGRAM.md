@@ -36,7 +36,9 @@ weights:
 
 ## Stop Conditions
 
-- score >= 0.95
+- target_score: 1.00
+- min_improvement_delta: 0.01
+- max_plateau_loops: 2
 - consecutive_discards >= max_discards_in_a_row
 
 ## Hypothesis Sources

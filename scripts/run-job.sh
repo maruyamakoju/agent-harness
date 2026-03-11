@@ -70,6 +70,10 @@ CONSECUTIVE_DISCARDS=0
 JUDGE_VERDICT=""
 LOOP_START_TIME=""
 MAX_CONSECUTIVE_DISCARDS=5
+PLATEAU_COUNT=0
+TARGET_SCORE="1.00"
+MIN_IMPROVEMENT_DELTA="0.01"
+MAX_PLATEAU_LOOPS=2
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -1538,12 +1542,26 @@ state_eval_baseline() {
 
     LOOP_START_TIME=$(date +%s)
 
-    # Read max_discards_in_a_row from PROGRAM.md if available
+    # Read stop condition params from PROGRAM.md if available
     if [[ -f "$WORKSPACE/PROGRAM.md" ]]; then
         local md_val
         md_val=$(grep -E 'max_discards_in_a_row:' "$WORKSPACE/PROGRAM.md" 2>/dev/null \
             | awk -F: '{gsub(/[ \t]/,"",$2); print $2}' | head -1)
         [[ -n "$md_val" && "$md_val" =~ ^[0-9]+$ ]] && MAX_CONSECUTIVE_DISCARDS="$md_val"
+
+        md_val=$(grep -E 'target_score:' "$WORKSPACE/PROGRAM.md" 2>/dev/null \
+            | awk -F: '{gsub(/[ \t]/,"",$2); print $2}' | head -1)
+        [[ -n "$md_val" ]] && TARGET_SCORE="$md_val"
+
+        md_val=$(grep -E 'min_improvement_delta:' "$WORKSPACE/PROGRAM.md" 2>/dev/null \
+            | awk -F: '{gsub(/[ \t]/,"",$2); print $2}' | head -1)
+        [[ -n "$md_val" ]] && MIN_IMPROVEMENT_DELTA="$md_val"
+
+        md_val=$(grep -E 'max_plateau_loops:' "$WORKSPACE/PROGRAM.md" 2>/dev/null \
+            | awk -F: '{gsub(/[ \t]/,"",$2); print $2}' | head -1)
+        [[ -n "$md_val" && "$md_val" =~ ^[0-9]+$ ]] && MAX_PLATEAU_LOOPS="$md_val"
+
+        log "INFO" "EVAL_BASELINE: params from PROGRAM.md: target_score=$TARGET_SCORE min_delta=$MIN_IMPROVEMENT_DELTA max_plateau=$MAX_PLATEAU_LOOPS max_discards=$MAX_CONSECUTIVE_DISCARDS"
     fi
 
     if [[ "${CLAUDE_MOCK:-false}" == "true" ]]; then
@@ -1917,6 +1935,25 @@ state_judge() {
         fi
     fi
 
+    # Track plateau: consecutive loops where score improvement < min_improvement_delta
+    # Skip plateau tracking for discard_audit (CODE didn't run, scores unchanged)
+    if [[ "$JUDGE_VERDICT" != "discard_audit" ]]; then
+        local is_plateau
+        is_plateau=$(awk "BEGIN {
+            diff = $SCORE_AFTER - $SCORE_BEFORE
+            if (diff < 0) diff = -diff
+            print (diff < $MIN_IMPROVEMENT_DELTA) ? 1 : 0
+        }")
+        if [[ "$is_plateau" -eq 1 ]]; then
+            PLATEAU_COUNT=$((PLATEAU_COUNT + 1))
+            log "INFO" "JUDGE: improvement below min_delta=$MIN_IMPROVEMENT_DELTA (plateau_count=$PLATEAU_COUNT/$MAX_PLATEAU_LOOPS)"
+        else
+            PLATEAU_COUNT=0
+            log "INFO" "JUDGE: improvement OK (plateau_count reset to 0)"
+        fi
+        log_json "judge_plateau" "plateau_count=$PLATEAU_COUNT max_plateau=$MAX_PLATEAU_LOOPS min_delta=$MIN_IMPROVEMENT_DELTA"
+    fi
+
     log_state_transition "JUDGE" "LEDGER"
     STATE="LEDGER"
 }
@@ -2015,7 +2052,27 @@ state_loop_check() {
         return
     fi
 
-    # Consecutive discard limit
+    # Target score reached — success stop
+    if [[ -n "$SCORE_AFTER" ]]; then
+        local target_reached
+        target_reached=$(awk "BEGIN { print ($SCORE_AFTER >= $TARGET_SCORE) ? 1 : 0 }")
+        if [[ "$target_reached" -eq 1 ]]; then
+            log "INFO" "Target score reached ($SCORE_AFTER >= $TARGET_SCORE) — stopping"
+            log_json "target_score_reached" "score=$SCORE_AFTER target=$TARGET_SCORE"
+            STATE="PUSH"
+            return
+        fi
+    fi
+
+    # Plateau detection — score improvement stalled for too many loops
+    if [[ $PLATEAU_COUNT -ge $MAX_PLATEAU_LOOPS ]]; then
+        log "INFO" "Plateau stop: no improvement for $PLATEAU_COUNT loops (min_delta=$MIN_IMPROVEMENT_DELTA)"
+        log_json "plateau_stop" "plateau_count=$PLATEAU_COUNT max=$MAX_PLATEAU_LOOPS min_delta=$MIN_IMPROVEMENT_DELTA score=$SCORE_AFTER"
+        STATE="PUSH"
+        return
+    fi
+
+    # Consecutive discard limit (safety net)
     if [[ $CONSECUTIVE_DISCARDS -ge $MAX_CONSECUTIVE_DISCARDS ]]; then
         log "WARN" "Consecutive discard limit reached ($CONSECUTIVE_DISCARDS >= $MAX_CONSECUTIVE_DISCARDS)"
         log_json "consecutive_discard_stop" "discards=$CONSECUTIVE_DISCARDS max=$MAX_CONSECUTIVE_DISCARDS"
