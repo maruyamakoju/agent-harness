@@ -228,6 +228,11 @@ jobs:
           fi
           echo "Default job mode backward compat validated."
 
+      - name: run-evals.sh regression tests (PR #5-#8)
+        run: |
+          chmod +x tests/test-run-evals.sh scripts/run-evals.sh
+          bash tests/test-run-evals.sh
+
       - name: E2E product loop tests (CLAUDE_MOCK)
         run: |
           chmod +x tests/test-product-loop-e2e.sh scripts/run-job.sh
