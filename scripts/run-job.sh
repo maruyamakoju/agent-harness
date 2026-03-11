@@ -1347,6 +1347,14 @@ state_scaffold() {
             fi
         done
         chmod +x "$WORKSPACE/init.sh" 2>/dev/null || true
+
+        # Allow job JSON to override PROGRAM.md via "program_md" field
+        local job_program_md
+        job_program_md=$(python3 -c "import json,sys; d=json.load(open('$JOB_FILE')); print(d.get('program_md',''))" 2>/dev/null || echo "")
+        if [[ -n "$job_program_md" ]]; then
+            echo "$job_program_md" > "$WORKSPACE/PROGRAM.md"
+            log "INFO" "SCAFFOLD: using job-defined PROGRAM.md (custom caps)"
+        fi
     fi
 
     # Protect product state files from .gitignore (they SHOULD be committed)
