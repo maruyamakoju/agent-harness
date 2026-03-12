@@ -38,13 +38,35 @@ make_ws() {
     cat > "$ws/PROGRAM.md" <<'MDEOF'
 ## Eval Protocol
 weights:
-  tests: 0.45
-  lint: 0.25
-  typecheck: 0.20
+  tests: 0.35
+  lint: 0.20
+  typecheck: 0.15
   coverage: 0.05
   security: 0.05
+  feature_coverage: 0.20
 MDEOF
     echo "$ws"
+}
+
+# Create FEATURES.md with $total features, first $done_count marked done
+put_features() {
+    local ws="$1" total="$2" done_count="$3"
+    {
+        echo "# Feature Tracker"
+        echo ""
+        echo "| ID | Feature | Status | Priority | Notes |"
+        echo "|----|---------|--------|----------|-------|"
+        local i
+        for i in $(seq 1 "$total"); do
+            local fid
+            fid=$(printf "F-%03d" "$i")
+            if [[ $i -le $done_count ]]; then
+                echo "| $fid | Feature $i | done | P0 | |"
+            else
+                echo "| $fid | Feature $i | not-started | P0 | |"
+            fi
+        done
+    } > "$ws/FEATURES.md"
 }
 
 put_eval() {
@@ -176,14 +198,15 @@ put_eval "$ws_t9" security-scan false
 s9="$(score_of "$ws_t9")"
 check "$s9" "0.9500" "T9: security-fail → composite score 0.9500"
 
-# T10: lint-only pass (initial state before any code) → score 0.2500
+# T10: lint-only pass, no FEATURES.md → feature_coverage=1.0, score 0.4000
+# (lint=0.20 + feature_coverage=0.20*1.0 = 0.40)
 ws_t10="$(make_ws "t10")"
 put_eval "$ws_t10" unit false
 put_eval "$ws_t10" lint true
 put_eval "$ws_t10" typecheck false
 put_eval "$ws_t10" security-scan false
 s10="$(score_of "$ws_t10")"
-check "$s10" "0.2500" "T10: lint-only → composite score 0.2500"
+check "$s10" "0.4000" "T10: lint-only, no FEATURES.md → composite score 0.4000"
 
 # T11: security-scan JSON with control chars → jq fails → score drops
 # This simulates the pre-fix state (jq can't parse → security reads as false)
@@ -253,6 +276,44 @@ if grep -qE "ruff.*check.*fix|ruff.*--fix" "$HARNESS_DIR/scripts/run-job.sh"; th
 else
     ng "T16: CODE prompt missing 'ruff check --fix' (regression for PR #7)"
 fi
+
+# ===========================================================================
+# feature_coverage sub-score
+# ===========================================================================
+echo ""
+echo "=== feature_coverage: FEATURES.md progress score ==="
+
+# T17: 0/6 features done, all evals pass → feature_coverage=0 → score 0.8000
+# (tests=0.35 + lint=0.20 + typecheck=0.15 + coverage=0.05 + security=0.05 + fc=0.20*0 = 0.80)
+ws_t17="$(make_ws "t17")"
+put_eval "$ws_t17" unit true
+put_eval "$ws_t17" lint true
+put_eval "$ws_t17" typecheck true
+put_eval "$ws_t17" security-scan true
+put_features "$ws_t17" 6 0
+s17="$(score_of "$ws_t17")"
+check "$s17" "0.8000" "T17: 0/6 features done, all evals pass → 0.8000"
+
+# T18: 3/6 features done, all evals pass → feature_coverage=0.5 → score 0.9000
+# (0.80 + 0.20*0.5 = 0.90)
+ws_t18="$(make_ws "t18")"
+put_eval "$ws_t18" unit true
+put_eval "$ws_t18" lint true
+put_eval "$ws_t18" typecheck true
+put_eval "$ws_t18" security-scan true
+put_features "$ws_t18" 6 3
+s18="$(score_of "$ws_t18")"
+check "$s18" "0.9000" "T18: 3/6 features done, all evals pass → 0.9000"
+
+# T19: 6/6 features done, all evals pass → feature_coverage=1.0 → score 1.0000
+ws_t19="$(make_ws "t19")"
+put_eval "$ws_t19" unit true
+put_eval "$ws_t19" lint true
+put_eval "$ws_t19" typecheck true
+put_eval "$ws_t19" security-scan true
+put_features "$ws_t19" 6 6
+s19="$(score_of "$ws_t19")"
+check "$s19" "1.0000" "T19: 6/6 features done, all evals pass → 1.0000"
 
 # ===========================================================================
 # Summary

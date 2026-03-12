@@ -225,24 +225,45 @@ run_perf_benchmark() {
 }
 
 # ---------------------------------------------------------------------------
+# Feature coverage: fraction of FEATURES.md rows marked "done"
+# Returns 1 if FEATURES.md is absent (mode=job backward compat).
+# ---------------------------------------------------------------------------
+compute_feature_coverage() {
+    local features_file="$WORKSPACE/FEATURES.md"
+    if [[ ! -f "$features_file" ]]; then
+        echo "1"
+        return
+    fi
+    local total done_count
+    total=$(grep -cE '^\| F-[0-9]+' "$features_file" 2>/dev/null || echo 0)
+    done_count=$(grep -cE '^\| F-[0-9]+.*\| done' "$features_file" 2>/dev/null || echo 0)
+    if [[ "$total" -eq 0 ]]; then
+        echo "0"
+        return
+    fi
+    awk "BEGIN { printf \"%.4f\", $done_count / $total }"
+}
+
+# ---------------------------------------------------------------------------
 # Composite score: read PROGRAM.md weights + latest eval results → 0.0-1.0
 # ---------------------------------------------------------------------------
 compute_composite_score() {
     local evals_dir="$WORKSPACE/EVALS"
 
-    # Default weights
-    local w_tests=0.40 w_lint=0.20 w_typecheck=0.15 w_coverage=0.15 w_security=0.10
+    # Default weights (sum = 1.0)
+    local w_tests=0.35 w_lint=0.20 w_typecheck=0.15 w_coverage=0.05 w_security=0.05 w_feature_coverage=0.20
 
     # Try reading weights from PROGRAM.md
     if [[ -f "$WORKSPACE/PROGRAM.md" ]]; then
         local line
         while IFS= read -r line; do
             case "$line" in
-                *tests:*)     w_tests=$(echo "$line"     | awk -F: '{gsub(/[ \t]/,"",$2); print $2}') ;;
-                *lint:*)      w_lint=$(echo "$line"      | awk -F: '{gsub(/[ \t]/,"",$2); print $2}') ;;
-                *typecheck:*) w_typecheck=$(echo "$line" | awk -F: '{gsub(/[ \t]/,"",$2); print $2}') ;;
-                *coverage:*)  w_coverage=$(echo "$line"  | awk -F: '{gsub(/[ \t]/,"",$2); print $2}') ;;
-                *security:*)  w_security=$(echo "$line"  | awk -F: '{gsub(/[ \t]/,"",$2); print $2}') ;;
+                *tests:*)            w_tests=$(echo "$line"            | awk -F: '{gsub(/[ \t]/,"",$2); print $2}') ;;
+                *lint:*)             w_lint=$(echo "$line"             | awk -F: '{gsub(/[ \t]/,"",$2); print $2}') ;;
+                *typecheck:*)        w_typecheck=$(echo "$line"        | awk -F: '{gsub(/[ \t]/,"",$2); print $2}') ;;
+                *feature_coverage:*) w_feature_coverage=$(echo "$line" | awk -F: '{gsub(/[ \t]/,"",$2); print $2}') ;;
+                *coverage:*)         w_coverage=$(echo "$line"         | awk -F: '{gsub(/[ \t]/,"",$2); print $2}') ;;
+                *security:*)         w_security=$(echo "$line"         | awk -F: '{gsub(/[ \t]/,"",$2); print $2}') ;;
             esac
         done < <(sed -n '/^## Eval Protocol/,/^## /p' "$WORKSPACE/PROGRAM.md" 2>/dev/null || true)
     fi
@@ -290,9 +311,13 @@ compute_composite_score() {
         return
     fi
 
+    # Feature coverage (0.0–1.0 fraction of FEATURES.md rows marked done)
+    local score_feature_coverage
+    score_feature_coverage=$(compute_feature_coverage)
+
     # Weighted composite
     awk "BEGIN {
-        score = ($w_tests * $score_tests) + ($w_lint * $score_lint) + ($w_typecheck * $score_typecheck) + ($w_coverage * $score_coverage) + ($w_security * $score_security)
+        score = ($w_tests * $score_tests) + ($w_lint * $score_lint) + ($w_typecheck * $score_typecheck) + ($w_coverage * $score_coverage) + ($w_security * $score_security) + ($w_feature_coverage * $score_feature_coverage)
         printf \"%.4f\", score
     }"
 }
