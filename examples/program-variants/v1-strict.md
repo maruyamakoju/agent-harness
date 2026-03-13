@@ -1,4 +1,4 @@
-# PROGRAM.md — Autoresearch Program Definition
+# PROGRAM.md — Strict Arena (v1)
 
 ## Product: {{PRODUCT_NAME}}
 
@@ -9,9 +9,9 @@ Each loop must produce a small, testable increment — not a large batch.
 
 ## Mutation Scope
 
-- Max files changed per loop: 5
-- Max files created per loop: 4
-- Max diff lines per loop: 300
+- Max files changed per loop: 3
+- Max files created per loop: 2
+- Max diff lines per loop: 150
 - Max endpoint/route changes per loop: 1
 
 ## Eval Protocol
@@ -31,8 +31,8 @@ weights:
 
 ## Budget
 
-- max_loops: {{MAX_LOOPS}}
-- max_wall_seconds: {{TIME_BUDGET}}
+- max_loops: 10
+- max_wall_seconds: 14400
 - max_discards_in_a_row: 3
 
 ## Stop Conditions
@@ -44,7 +44,7 @@ weights:
 
 ## Hypothesis Sources
 
-- FEATURES.md, eval failures, coverage gaps, agent observations
+- FEATURES.md, eval failures, coverage gaps
 
 ## Arena Contract
 
@@ -56,4 +56,4 @@ weights:
 - Update FEATURES.md status only for baseline feature IDs.
 - KEEP only if score improves and audit passes.
 - If tests break, fix them in the SAME loop before moving on.
-- Prefer depth (thorough tests for one feature) over breadth (many features with no tests).
+- Prefer depth (thorough tests for one feature) over breadth.

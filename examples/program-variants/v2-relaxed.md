@@ -1,4 +1,4 @@
-# PROGRAM.md — Autoresearch Program Definition
+# PROGRAM.md — Relaxed Arena (v2)
 
 ## Product: {{PRODUCT_NAME}}
 
@@ -12,7 +12,7 @@ Each loop must produce a small, testable increment — not a large batch.
 - Max files changed per loop: 5
 - Max files created per loop: 4
 - Max diff lines per loop: 300
-- Max endpoint/route changes per loop: 1
+- Max endpoint/route changes per loop: 2
 
 ## Eval Protocol
 
@@ -31,20 +31,20 @@ weights:
 
 ## Budget
 
-- max_loops: {{MAX_LOOPS}}
-- max_wall_seconds: {{TIME_BUDGET}}
-- max_discards_in_a_row: 3
+- max_loops: 10
+- max_wall_seconds: 14400
+- max_discards_in_a_row: 5
 
 ## Stop Conditions
 
 - target_score: 1.00
-- min_improvement_delta: 0.01
-- max_plateau_loops: 2
+- min_improvement_delta: 0.005
+- max_plateau_loops: 3
 - consecutive_discards >= max_discards_in_a_row
 
 ## Hypothesis Sources
 
-- FEATURES.md, eval failures, coverage gaps, agent observations
+- FEATURES.md, eval failures, coverage gaps
 
 ## Arena Contract
 
@@ -55,5 +55,3 @@ weights:
 - Run the smallest relevant test first, then full eval.
 - Update FEATURES.md status only for baseline feature IDs.
 - KEEP only if score improves and audit passes.
-- If tests break, fix them in the SAME loop before moving on.
-- Prefer depth (thorough tests for one feature) over breadth (many features with no tests).
