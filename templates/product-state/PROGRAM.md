@@ -17,11 +17,12 @@ Each loop must produce a small, testable increment — not a large batch.
 ## Eval Protocol
 
 weights:
-  tests: 0.45
-  lint: 0.25
-  typecheck: 0.20
+  tests: 0.35
+  lint: 0.20
+  typecheck: 0.15
   coverage: 0.05
   security: 0.05
+  feature_coverage: 0.20
 
 ## Keep/Discard Policy
 

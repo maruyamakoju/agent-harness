@@ -1,0 +1,25 @@
+{
+  "id": "soak-multiloop-001",
+  "repo": "local://create",
+  "base_ref": "main",
+  "work_branch": "forge/todolist-cli",
+  "task": "Build a TodoList CLI in Python using typer + SQLite.\n\nIMPORTANT: Use the following FEATURES.md EXACTLY \u2014 do NOT implement more than 1-2 features per loop. The mutation caps are strict.\n\n## F-001: Project scaffold\nCreate src/todolist/__init__.py (empty), src/todolist/db.py with get_connection() and init_db() (todos table: id INTEGER PK, title TEXT NOT NULL, done INTEGER DEFAULT 0, priority INTEGER DEFAULT 0, due_date TEXT).\ntests/test_db.py: 3 tests (connection ok, init_db creates table, idempotent).\n\n## F-002: CLI entry + add command\nsrc/todolist/main.py: typer app, app() entry.\n\"add\" command: todolist add <title> [--priority 0-2] \u2192 inserts row, prints \"Added: <title> (id=N)\".\ntests/test_add.py: add succeeds, duplicate titles ok, empty title raises error.\n\n## F-003: list command\n\"list\" command: todolist list \u2192 prints all todos (id, title, priority, done, due_date). Empty list prints \"No todos.\".\ntests/test_list.py: empty list, list with items, shows correct fields.\n\n## F-004: complete command\n\"complete\" command: todolist complete <id> \u2192 sets done=1. Prints \"Done: <title>\". Error if id not found.\ntests/test_complete.py: complete existing, complete missing id errors, already-done is idempotent.\n\n## F-005: delete command\n\"delete\" command: todolist delete <id> \u2192 removes row. Prints \"Deleted: <title>\". Error if id not found.\ntests/test_delete.py: delete existing (verify gone), delete missing errors.\n\n## F-006: search command\n\"search\" command: todolist search <query> \u2192 case-insensitive search in title. Prints matching todos.\ntests/test_search.py: finds match, no results, case-insensitive.\n\n## F-007: priority filter\n\"list --priority N\" flag \u2192 filter by priority level (0, 1, 2).\ntests/test_priority.py: add items with different priorities, filter shows only correct level.\n\n## F-008: due date\n\"add --due YYYY-MM-DD\" flag \u2192 stores due_date. \"list --overdue\" \u2192 shows todos with due_date < today.\ntests/test_due.py: add with due date, list overdue, list not overdue excluded.\n\n## F-009: export\n\"export\" command: todolist export [--file out.json] \u2192 writes todos to JSON. Defaults to stdout.\ntests/test_export.py: export produces valid JSON, all fields present.\n\n## F-010: import\n\"import\" command: todolist import <file.json> \u2192 reads JSON, inserts todos (skips duplicates by title).\ntests/test_import.py: import round-trips with export, duplicates skipped.\n",
+  "time_budget_sec": 32400,
+  "mode": "product",
+  "product_name": "TodoList CLI",
+  "max_loops": 15,
+  "create_repo": true,
+  "commands": {
+    "setup": [
+      "python -m pip install typer pytest ruff mypy pip-audit",
+      "printf '[project]\\nname = \"todolist\"\\nversion = \"0.1.0\"\\nrequires-python = \">=3.11\"\\n\\n[tool.ruff]\\nline-length = 88\\nselect = [\"E\", \"F\", \"W\", \"I\"]\\n\\n[tool.mypy]\\nstrict = true\\nwarn_return_any = true\\nwarn_unused_configs = true\\n\\n[tool.pytest.ini_options]\\ntestpaths = [\"tests\"]\\npythonpath = [\"src\"]\\n\\n' > pyproject.toml"
+    ],
+    "test": [
+      "python -m pytest tests/ -v --tb=short",
+      "python -m ruff check .",
+      "python -m mypy src/ --ignore-missing-imports"
+    ]
+  },
+  "day_plan": null,
+  "program_md": "# PROGRAM.md \u2014 Autoresearch Program Definition\n\n## Product: TodoList CLI\n\n## Objective\n\nMaximize composite quality score through hypothesis-driven mutations.\nEach loop implements EXACTLY ONE feature from FEATURES.md \u2014 no more.\n\n## Mutation Scope\n\n- Max files changed per loop: 2\n- Max files created per loop: 1\n- Max diff lines per loop: 80\n- Max endpoint/route changes per loop: 0\n\n## Eval Protocol\n\nweights:\n  tests: 0.45\n  lint: 0.25\n  typecheck: 0.20\n  coverage: 0.05\n  security: 0.05\n\n## Keep/Discard Policy\n\n- keep_threshold: score_after > score_before\n- tie_policy: discard\n\n## Budget\n\n- max_loops: 15\n- max_wall_seconds: 32400\n- max_discards_in_a_row: 3\n\n## Stop Conditions\n\n- target_score: 1.00\n- min_improvement_delta: 0.01\n- max_plateau_loops: 2\n- consecutive_discards >= max_discards_in_a_row\n\n## Hypothesis Sources\n\n- FEATURES.md (implement exactly one feature per loop), eval failures\n\n## Arena Rules\n\n- Each hypothesis MUST target exactly ONE feature from FEATURES.md\n- DO NOT implement multiple features in a single loop \u2014 caps will reject it\n- One feature = one test file + one source change = at most 80 diff lines\n- If tests break, fix them in the SAME loop before committing\n"
+}
