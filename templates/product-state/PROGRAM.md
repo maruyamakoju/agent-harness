@@ -46,9 +46,14 @@ weights:
 
 - FEATURES.md, eval failures, coverage gaps, agent observations
 
-## Arena Rules
+## Arena Contract
 
-- Each hypothesis must target exactly ONE feature or ONE eval improvement
-- Do NOT implement multiple features in a single loop
-- If tests break, fix them in the SAME loop before moving on
-- Prefer depth (thorough tests for one feature) over breadth (many features with no tests)
+- Choose exactly one baseline feature or one blocking defect per loop.
+- Before making changes, search the codebase. Do not assume missing implementation.
+- Do not create scratch, debug, or temp files.
+- Do not edit scoring files, eval scripts, or EVALS/features-baseline.json.
+- Run the smallest relevant test first, then full eval.
+- Update FEATURES.md status only for baseline feature IDs.
+- KEEP only if score improves and audit passes.
+- If tests break, fix them in the SAME loop before moving on.
+- Prefer depth (thorough tests for one feature) over breadth (many features with no tests).

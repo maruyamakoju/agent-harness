@@ -1422,6 +1422,20 @@ PROMPT
         log "INFO" "SCAFFOLD: applied job-defined PROGRAM.md (custom caps)"
     fi
 
+    # Freeze baseline feature list for immutable scoring denominator
+    if [[ -f "$WORKSPACE/FEATURES.md" ]]; then
+        mkdir -p "$WORKSPACE/EVALS"
+        local baseline_ids
+        baseline_ids=$(grep -oE '^[|] F-[0-9]+' "$WORKSPACE/FEATURES.md" 2>/dev/null \
+            | sed 's/^| //' | PATH="$HOME/bin:$PATH" jq -R -s 'split("\n") | map(select(length > 0))' 2>/dev/null || echo '[]')
+        local baseline_count
+        baseline_count=$(echo "$baseline_ids" | PATH="$HOME/bin:$PATH" jq 'length' 2>/dev/null || echo 0)
+        cat > "$WORKSPACE/EVALS/features-baseline.json" <<FBEOF
+{"feature_ids":${baseline_ids},"frozen_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","source":"SCAFFOLD"}
+FBEOF
+        log "INFO" "SCAFFOLD: frozen baseline with $baseline_count feature IDs"
+    fi
+
     # Ensure scaffold files are committed (Claude's commit may have been permission-denied)
     cd "$WORKSPACE"
     git add -A 2>/dev/null || true
@@ -1642,7 +1656,9 @@ ${context}
 1. Read PROGRAM.md for mutation scope, eval weights, and stop conditions.
 2. Read FEATURES.md, recent eval results, and the experiment ledger.
 3. Formulate exactly ONE hypothesis to test next:
-   - Source from: not-started features (P0 first), regressions, eval failures, coverage gaps
+   - Choose exactly one baseline feature (by ID) or one blocking defect
+   - Source from: not-started baseline features (P0 first), regressions, eval failures
+   - Before planning changes, search the codebase — do not assume missing implementation
    - Each hypothesis = a single, testable mutation within PROGRAM.md caps
 4. Update PROGRESS.md — set "### Hypothesis" to describe:
    - Which feature (by ID, e.g. F-003) or quality improvement
@@ -1745,11 +1761,14 @@ ${context}
 - Max diff lines (insertions + deletions): ${cap_diff_lines}
 - Stay WITHIN these limits or your changes WILL be rolled back.
 
-## Rules
+## Arena Contract
 - Implement ONLY the hypothesis described in "### Hypothesis"
+- Before making changes, search the codebase — do not assume missing implementation
 - Do NOT pick a different task or implement multiple features
+- Do NOT create scratch, debug, or temp files
 - Do NOT push to remote
-- Do NOT modify .git/config or PROGRAM.md
+- Do NOT modify .git/config, PROGRAM.md, eval scripts, or EVALS/features-baseline.json
+- Update FEATURES.md status only for the baseline feature ID in the hypothesis
 - After committing, update FEATURES.md status and PROGRESS.md
 - Log any architectural decisions in DECISIONS.md
 PROMPT

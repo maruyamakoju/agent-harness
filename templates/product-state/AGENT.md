@@ -39,8 +39,10 @@ Types: feat, fix, test, refactor, docs, chore
 - **DO** modify source code, tests, configuration, and documentation
 - **DO** update PROGRESS.md, FEATURES.md, DECISIONS.md after each action
 - **DO NOT** modify AGENT.md or PROGRAM.md (these are harness-controlled)
+- **DO NOT** modify EVALS/features-baseline.json, eval scripts, or scoring files
 - **DO NOT** delete or overwrite DECISIONS.md entries
 - **DO NOT** skip tests to save time
+- **DO NOT** create scratch, debug, or temp files
 
 ## Quality Standards
 

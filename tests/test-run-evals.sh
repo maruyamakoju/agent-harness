@@ -316,6 +316,96 @@ s19="$(score_of "$ws_t19")"
 check "$s19" "1.0000" "T19: 6/6 features done, all evals pass → 1.0000"
 
 # ===========================================================================
+# Baseline-pinned feature_coverage (arena integrity)
+# ===========================================================================
+echo ""
+echo "=== baseline-pinned feature_coverage: immutable scoring denominator ==="
+
+# Helper: create features-baseline.json
+put_baseline() {
+    local ws="$1"
+    shift
+    # remaining args are feature IDs
+    local ids_json=""
+    ids_json=$(printf '%s\n' "$@" | PATH="$HOME/bin:$PATH" jq -R -s 'split("\n") | map(select(length > 0))' 2>/dev/null)
+    mkdir -p "$ws/EVALS"
+    printf '{"feature_ids":%s,"frozen_at":"2026-03-13T00:00:00Z","source":"SCAFFOLD"}\n' "$ids_json" \
+        > "$ws/EVALS/features-baseline.json"
+}
+
+# T20: baseline=7, current=15 features, 7/7 baseline done → denominator stays 7 → fc=1.0
+ws_t20="$(make_ws "t20")"
+put_eval "$ws_t20" unit true
+put_eval "$ws_t20" lint true
+put_eval "$ws_t20" typecheck true
+put_eval "$ws_t20" security-scan true
+# Create 15 features (all done), but baseline only has 7
+put_features "$ws_t20" 15 15
+put_baseline "$ws_t20" "F-001" "F-002" "F-003" "F-004" "F-005" "F-006" "F-007"
+s20="$(score_of "$ws_t20")"
+check "$s20" "1.0000" "T20: baseline=7 current=15 all-done → denominator pinned to 7 → score 1.0000"
+
+# T21: baseline=7, only 3 of 7 baseline features done, 8 extra done → fc=3/7
+# score = 0.35+0.20+0.15+0.05+0.05 + 0.20*(3/7) = 0.80 + 0.0857 = 0.8857
+ws_t21="$(make_ws "t21")"
+put_eval "$ws_t21" unit true
+put_eval "$ws_t21" lint true
+put_eval "$ws_t21" typecheck true
+put_eval "$ws_t21" security-scan true
+# 15 features: F-001..F-011 done (11 done), F-012..F-015 not-started
+put_features "$ws_t21" 15 11
+# Baseline only F-001..F-007; F-001..F-003 are in first 11 (done), F-004..F-007 also done
+# Actually put_features marks the first $done_count features as done sequentially
+# So F-001..F-011 are done. Baseline F-001..F-007 → all 7 are done.
+# Let's make it so only 3 baseline features are done:
+# We need F-001..F-003 done, F-004..F-007 not-started (but they're in first 11 done positions)
+# Easier: create custom FEATURES.md
+{
+    echo "# Feature Tracker"
+    echo ""
+    echo "| ID | Feature | Status | Priority | Notes |"
+    echo "|----|---------|--------|----------|-------|"
+    echo "| F-001 | Feature 1 | done | P0 | |"
+    echo "| F-002 | Feature 2 | done | P0 | |"
+    echo "| F-003 | Feature 3 | done | P0 | |"
+    echo "| F-004 | Feature 4 | not-started | P0 | |"
+    echo "| F-005 | Feature 5 | not-started | P0 | |"
+    echo "| F-006 | Feature 6 | not-started | P0 | |"
+    echo "| F-007 | Feature 7 | not-started | P0 | |"
+    echo "| F-008 | Feature 8 (extra) | done | P1 | |"
+    echo "| F-009 | Feature 9 (extra) | done | P1 | |"
+    echo "| F-010 | Feature 10 (extra) | done | P1 | |"
+} > "$ws_t21/FEATURES.md"
+put_baseline "$ws_t21" "F-001" "F-002" "F-003" "F-004" "F-005" "F-006" "F-007"
+s21="$(score_of "$ws_t21")"
+# fc = 3/7 = 0.4286; score = 0.80 + 0.20*0.4286 = 0.8857
+check "$s21" "0.8857" "T21: baseline=7, 3/7 baseline done, extras ignored → score 0.8857"
+
+# T22: no baseline file (legacy mode) → uses current FEATURES.md as denominator
+ws_t22="$(make_ws "t22")"
+put_eval "$ws_t22" unit true
+put_eval "$ws_t22" lint true
+put_eval "$ws_t22" typecheck true
+put_eval "$ws_t22" security-scan true
+put_features "$ws_t22" 6 3
+# Explicitly ensure NO baseline file
+rm -f "$ws_t22/EVALS/features-baseline.json" 2>/dev/null || true
+s22="$(score_of "$ws_t22")"
+# Legacy: 3/6 = 0.5; score = 0.80 + 0.20*0.5 = 0.9000
+check "$s22" "0.9000" "T22: no baseline (legacy mode) → uses FEATURES.md denominator → 0.9000"
+
+# T23: baseline exists but FEATURES.md absent → returns 1 (backward compat)
+ws_t23="$(make_ws "t23")"
+put_eval "$ws_t23" unit true
+put_eval "$ws_t23" lint true
+put_eval "$ws_t23" typecheck true
+put_eval "$ws_t23" security-scan true
+put_baseline "$ws_t23" "F-001" "F-002" "F-003"
+rm -f "$ws_t23/FEATURES.md" 2>/dev/null || true
+s23="$(score_of "$ws_t23")"
+check "$s23" "1.0000" "T23: baseline exists but no FEATURES.md → fc=1 (backward compat) → 1.0000"
+
+# ===========================================================================
 # Summary
 # ===========================================================================
 echo ""

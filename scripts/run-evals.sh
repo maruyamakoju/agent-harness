@@ -225,18 +225,50 @@ run_perf_benchmark() {
 }
 
 # ---------------------------------------------------------------------------
-# Feature coverage: fraction of FEATURES.md rows marked "done"
+# Feature coverage: fraction of baseline features marked "done"
+# Uses EVALS/features-baseline.json as denominator when present (arena mode).
+# Falls back to current FEATURES.md row count (legacy/non-arena mode).
 # Returns 1 if FEATURES.md is absent (mode=job backward compat).
 # ---------------------------------------------------------------------------
 compute_feature_coverage() {
     local features_file="$WORKSPACE/FEATURES.md"
+    local baseline_file="$WORKSPACE/EVALS/features-baseline.json"
+
     if [[ ! -f "$features_file" ]]; then
         echo "1"
         return
     fi
+
     local total done_count
-    total=$(grep -cE '^\| F-[0-9]+' "$features_file" 2>/dev/null || echo 0)
-    done_count=$(grep -cE '^\| F-[0-9]+.*\| done' "$features_file" 2>/dev/null || echo 0)
+
+    if [[ -f "$baseline_file" ]]; then
+        # Arena mode: denominator is baseline feature count (immutable)
+        total=$(PATH="$HOME/bin:$PATH" jq -r '.feature_ids | length' "$baseline_file" 2>/dev/null || echo 0)
+
+        # Count only baseline feature IDs that are marked done in current FEATURES.md
+        done_count=0
+        local fid
+        while IFS= read -r fid; do
+            fid=$(echo "$fid" | tr -d '\r')
+            [[ -z "$fid" ]] && continue
+            if grep -qE "^\| ${fid} .*\| done" "$features_file" 2>/dev/null; then
+                done_count=$((done_count + 1))
+            fi
+        done < <(PATH="$HOME/bin:$PATH" jq -r '.feature_ids[]' "$baseline_file" 2>/dev/null)
+
+        # Warn about extra features (not in baseline) — informational only
+        local current_total
+        current_total=$(grep -cE '^\| F-[0-9]+' "$features_file" 2>/dev/null || echo 0)
+        if [[ "$current_total" -gt "$total" ]]; then
+            local extra=$((current_total - total))
+            echo "[eval] WARNING: $extra extra feature(s) added beyond baseline (not counted in score)" >&2
+        fi
+    else
+        # Legacy mode: use current FEATURES.md as denominator
+        total=$(grep -cE '^\| F-[0-9]+' "$features_file" 2>/dev/null || echo 0)
+        done_count=$(grep -cE '^\| F-[0-9]+.*\| done' "$features_file" 2>/dev/null || echo 0)
+    fi
+
     if [[ "$total" -eq 0 ]]; then
         echo "0"
         return
