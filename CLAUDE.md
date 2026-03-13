@@ -74,6 +74,30 @@ There is NO human in the loop during your execution. Follow these rules strictly
 - <any important observations or decisions>
 ```
 
+## Core Freeze Policy (v0.6.0, 2026-03-13)
+
+The harness core is **frozen**. This means:
+
+### Permitted harness changes
+1. **Evaluator integrity** — scoring accuracy bugs, baseline file format corrections
+2. **Rollback / concurrency / data-loss** — preventing workspace corruption or lost commits
+3. **Ledger schema stabilization** — additive schema changes that preserve backward compat
+
+### Not permitted without explicit unfreeze
+- Dashboard features or UI changes
+- OpenClaw / chat integration
+- New stop policies or loop variants
+- Subagent role complexity additions
+- New language/framework support
+- Any run-job.sh state machine changes outside the permitted list
+
+### What to work on instead
+The human-editable research surface is **PROGRAM.md**. Change arena rules there.
+Compare results using `scripts/compare-programs.sh` after running A/B experiments with
+`scripts/create-variant-jobs.sh`.
+
+---
+
 ## MCP Server Integration
 
 Two MCP servers are configured in `.claude/mcp_servers.json`:
