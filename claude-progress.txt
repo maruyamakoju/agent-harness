@@ -113,3 +113,61 @@
 - OpenClaw is frozen — core + execution must be stable first
 - Role selection via prompt prefix injection (no separate CLI processes)
 - This is "promising v0.3" — not yet production-ready
+
+---
+
+### Round 16: Arena + Baseline Pinning (v0.6.0)
+**Status**: COMPLETE — tagged v0.6.0, PRs #17 + #18 merged
+
+#### Phase: Baseline-Pinned Feature Coverage
+- [x] SCAFFOLD generates `EVALS/features-baseline.json` (frozen at scaffold time)
+- [x] `compute_feature_coverage()` uses baseline as immutable denominator
+- [x] Extra features added by agent don't inflate score
+- [x] Regression tests T20-T23 added to tests/test-run-evals.sh
+
+#### Phase: PROGRAM.md Arena Contract
+- [x] Template PROGRAM.md: "Arena Rules" → "Arena Contract" with 9 behavioral clauses
+- [x] Template AGENT.md: added prohibitions on editing baseline/eval files + no scratch files
+- [x] PLAN prompt: "Choose exactly one baseline feature" + search-before-write
+- [x] CODE prompt: Arena Contract block replaces generic rules
+
+#### Phase: A/B Infrastructure
+- [x] `scripts/compare-programs.sh` — ledger comparison metrics (keep_rate, L→Tgt, T→Tgt, ΔScore/Keep, feat/hr)
+- [x] `scripts/create-variant-jobs.sh` — generates A/B job pairs from base JSON + variant PROGRAM.md files
+- [x] `examples/program-variants/v1-strict.md` — tight caps (files=3/2, diff=150)
+- [x] `examples/program-variants/v2-relaxed.md` — relaxed caps (files=5/4, diff=300)
+
+#### Phase: bmark-cli-002 Validation (10 loops)
+- [x] Baseline frozen at 13 features (Claude expanded 7 spec → 13)
+- [x] Score delta per feature = 0.0154 ≈ 0.20/13 — confirmed
+- [x] F-001 alone → 0.6633 (NOT 1.0) — baseline-pinned working
+- [x] 10 loops all KEEP, `target_score_reached` at loop 10
+
+#### Phase: v1-strict vs v2-relaxed A/B Experiment
+- [x] v1-strict (files=3/2, diff=150, max_discards=3): 9 loops, 9 KEEP, score 0.25→1.00 in 2907s
+- [x] v2-relaxed (files=5/4, diff=300, max_discards=5): 5 loops, 0 KEEP, all discard_audit, stopped in 2110s
+- [x] Root cause: v2 PROGRESS.md rollback → agent memory wiped → re-implements from scratch each loop
+- [x] v2 files_changed per loop: 6→10→10→9→7 (never below cap of 5)
+- [x] Observation report: `logs/ab-observation-v1v2-001.md`
+
+### Round 16 Metrics
+- **Tests**: 220 dashboard + 23 eval regression + 59 E2E assertions (12 tests)
+- **Coverage**: 84% dashboard
+- **New files**: compare-programs.sh, create-variant-jobs.sh, 2 variant PROGRAM.md, bmark-cli-002 job
+- **Stop conditions validated**: target_score_reached, plateau_stop, consecutive_discard_stop, discard_audit (all 4)
+- **Core freeze**: active — harness is locked, research via PROGRAM.md only
+
+### A/B Experiment Results Summary
+| Experiment | Loops | Keeps | KeepRate | L→Tgt | T→Tgt(s) | Score Range |
+|---|---|---|---|---|---|---|
+| bmark-cli-002-v1 | 9 | 9 | 1.0000 | 9 | 2907 | 0.2500→1.0000 |
+| bmark-cli-002-v2 | 5 | 0 | 0.0000 | ∞ | ∞ | 0.2500→0.2500 |
+
+### Key Finding: `max_files_changed` is the dominant behavioral parameter
+Tight caps (3) force 1-feature-per-loop. Relaxed caps (5) enable scope creep.
+The arena contract alone cannot enforce discipline — the cap is the enforcement mechanism.
+
+### Proposed v3
+Same bmark baseline + tight caps (files=3/2) + Arena Contract addition:
+"Read EVALS/ledger.jsonl to see previous verdict before planning" → agent can learn
+from discard_audit even after PROGRESS.md rollback.
