@@ -95,3 +95,59 @@ Next work surface: PROGRAM.md variants (A/B experiments)
 - CLAUDE_MOCK + E2E tests
 - Subagent roles, 3-day plan engine, eval framework scaffolded
 - Real Claude 5-loop smoke test passed
+
+---
+
+### Round 17: A/B Experiment Results (2026-03-13) — COMPLETE
+
+#### v1-strict vs v2-relaxed on bmark-cli-002 baseline
+
+| Experiment | Loops | Keeps | KeepRate | L→Tgt | T→Tgt(s) | Score Range |
+|---|---|---|---|---|---|---|
+| bmark-cli-002-v1 | 9 | 9 | 1.0000 | 9 | 2907 | 0.2500→1.0000 |
+| bmark-cli-002-v2 | 5 | 0 | 0.0000 | ∞ | ∞ | 0.2500→0.2500 |
+
+#### v2-relaxed Root Cause: PROGRESS.md Rollback Loop
+1. CODE_AUDIT fails (files_changed: 6→10→10→9→7, cap=5) → git reset --hard
+2. PROGRESS.md reverts to scaffold state (Loop: 0)
+3. Agent reads rolled-back PROGRESS.md → sees no progress → tries full implementation again
+4. Hypothesis text unchanged across all 5 loops (always scaffold initial text)
+
+#### Key Finding
+`max_files_changed` is the dominant behavioral parameter.
+Tight caps (3) enforce 1-feature-per-loop. Relaxed caps (5) invite scope creep.
+The Arena Contract alone cannot enforce discipline — the cap IS the mechanism.
+
+#### Proposed v3
+- Same tight caps as v1 (files=3/2, diff=150)
+- Arena Contract addition: "Read EVALS/ledger.jsonl before planning" (survives rollback)
+- Agent can learn from discard_audit without relying on PROGRESS.md
+
+#### Artifact
+`logs/ab-observation-v1v2-001.md` — full per-loop breakdown and root cause analysis
+
+---
+
+### Round 18: v2.1 Single-Variable Experiment (2026-03-14) — COMPLETE
+
+**Design**: bmark-cli-002-v2.1 = v2-relaxed caps (files=5/4) + ledger-reading instruction only
+
+| Experiment | Loops | Keeps | KeepRate | L→Tgt | T→Tgt(s) | DiscRecovery | Score |
+|---|---|---|---|---|---|---|---|
+| v1-strict | 9 | 9 | 1.0000 | 9 | 2907 | N/A | 0.25→1.00 |
+| v2-relaxed | 5 | 0 | 0.0000 | ∞ | ∞ | 0.0000 | 0.25→0.25 |
+| v2.1-ledger-read | 9 | 8 | 0.8889 | 9 | 3037 | **1.0000** | 0.25→1.00 |
+
+Stop: target_score_reached (1.0000) at loop 9. Duration: 3208s.
+
+**Hypothesis confirmed**: Root cause of v2 = PROGRESS.md rollback memory loss.
+Ledger-reading instruction (1 variable) → complete recovery.
+
+Evidence (v2.1 ledger):
+- Loop 1: discard_audit (6 files, cap=5 — no ledger yet)
+- Loop 2: "Last verdict: discard_audit | Response: Re-implemented with 5-file scope" → KEEP (0.25→0.81)
+- Loops 3-9: all KEEP, each hypothesis starts with "Last verdict: keep | Response: ..."
+- DiscrRecovery = 1.0000
+
+**Action**: Added ledger-reading as first Arena Contract rule in `templates/product-state/PROGRAM.md`
+**Artifact**: `logs/ab-observation-v2.1-001.md`
