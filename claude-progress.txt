@@ -151,3 +151,71 @@ Evidence (v2.1 ledger):
 
 **Action**: Added ledger-reading as first Arena Contract rule in `templates/product-state/PROGRAM.md`
 **Artifact**: `logs/ab-observation-v2.1-001.md`
+
+---
+
+### Round 19: Real Product Validation — costctl (2026-03-14) — COMPLETE
+
+**Goal**: Validate standard operational profile (v0.6.1) on a real product with fixed 8-feature baseline.
+**Product**: API Cost Tracker CLI (costctl) — Python CLI, Typer, SQLite3, Rich.
+
+#### costctl-001 — Setup bug discovery
+
+| Loop | Verdict | files_changed | Score |
+|---|---|---|---|
+| 1 | keep | 3 files | 0.2500→0.6750 |
+| 2 | discard_audit | 9 > max=3 | 0.6750→0.6750 |
+| 3 | discard_audit | 8 > max=3 | 0.6750→0.6750 |
+| 4 | discard_audit | 8 > max=3 | 0.6750→0.6750 |
+
+Stop: `consecutive_discard_stop (3/3)`. Duration: 1931s.
+
+**Root cause**: `*.egg-info/` missing from `.gitignore`. `pip install -e .` creates
+`src/costctl.egg-info/` (4-6 files) committed by `git add .`, inflating git diff count.
+**Fix**: add comprehensive `.gitignore` (incl. `*.egg-info/`) as second setup command.
+
+#### costctl-002 — Fixed run (production profile)
+
+| Loop | Verdict | Score |
+|---|---|---|
+| 1 | keep | 0.2500→0.6750 |
+| 2 | keep | 0.6750→0.8250 |
+| 3 | discard_audit | diff_lines=165>150 |
+| 4 | keep | 0.8250→0.8750 |
+| 5 | discard_regression | score fell |
+| 6 | keep | 0.8750→0.9000 |
+| 7 | keep | 0.9000→0.9250 |
+| 8 | keep | 0.9250→0.9500 |
+| 9 | keep | 0.9500→0.9750 |
+| 10 | discard_audit | diff_lines=153>150 |
+| 11 | keep | 0.9750→**1.0000** |
+
+Stop: `target_score_reached (1.0000)` at loop 11. Duration: 3359s.
+
+**Key findings**:
+- 0 file-count violations (egg-info fix confirmed) ✓
+- 2 diff_lines discards (153, 165 > 150) — recovery worked both times ✓
+- 1 regression discard — immediate recovery ✓
+- 16 tests passing, ruff + mypy clean at completion ✓
+- Baseline fixed at 8 features (no scaffold expansion) ✓
+
+**Artifacts**: `logs/costctl-001-observation.md`, `logs/costctl-002-observation.md`
+
+#### Standard Profile Validation Status
+
+| Product | Stack | Loops | KEEPs | Score | Status |
+|---|---|---|---|---|---|
+| bmark-cli-002 | Python CLI | 10 | 10 | 0.25→1.00 | validated |
+| costctl-002 | Python CLI | 11 | 8 | 0.25→1.00 | validated |
+
+**Next**: costctl-api-001 — same domain, FastAPI architecture (validates cross-stack external validity).
+
+---
+
+### Metrics (cumulative)
+- Tests: 220 dashboard + 23 eval regression + E2E
+- Coverage: 84%
+- PRs merged: #1-#20
+- Stop conditions validated: plateau_stop, consecutive_discard_stop, target_score_reached, max_loops_reached
+- Products validated: TaskForge CLI, FastAPI Notes API, Bookmark Manager CLI, API Cost Tracker CLI
+- Standard profile (v0.6.1): 2/2 real product runs → target_score_reached
