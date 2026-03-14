@@ -208,14 +208,49 @@ Stop: `target_score_reached (1.0000)` at loop 11. Duration: 3359s.
 | bmark-cli-002 | Python CLI | 10 | 10 | 0.25→1.00 | validated |
 | costctl-002 | Python CLI | 11 | 8 | 0.25→1.00 | validated |
 
-**Next**: costctl-api-001 — same domain, FastAPI architecture (validates cross-stack external validity).
+---
+
+### Round 20: Cross-Stack Validation — costctl-api-001 (2026-03-14) — COMPLETE
+
+**Product**: API Cost Tracker HTTP API — FastAPI, SQLite3, Pydantic v2, httpx TestClient.
+**Goal**: Same domain as costctl, different architecture → confirms cross-stack external validity.
+
+| Loop | Verdict | Score |
+|---|---|---|
+| 1 | keep | 0.2500→0.6750 |
+| 2 | discard_audit | files_changed=4>3 |
+| 3 | keep | 0.6750→0.8500 |
+| 4 | keep | 0.8500→0.8750 |
+| 5 | keep | 0.8750→0.9000 |
+| 6 | keep | 0.9000→0.9250 |
+| 7 | keep | 0.9250→0.9500 |
+| 8 | keep | 0.9500→0.9750 |
+| 9 | keep | 0.9750→**1.0000** |
+
+Stop: `target_score_reached (1.0000)` at loop 9. Duration: 2726s.
+
+**Key findings**: FastAPI + standard profile = same result as CLI. DiscrRecovery=1.0000.
+23 httpx TestClient tests. 0 diff_lines violations. Faster than CLI run (−633s).
+
+**Artifact**: `logs/costctl-api-001-observation.md`
+
+#### External Validity: CONFIRMED (Validation Phase Complete)
+
+| Product | Architecture | Loops | KEEPs | Score |
+|---|---|---|---|---|
+| bmark-cli-002 | Python CLI | 10 | 10 | 0.25→1.00 |
+| costctl-002 | Python CLI | 11 | 8 | 0.25→1.00 |
+| costctl-api-001 | FastAPI HTTP API | 9 | 8 | 0.25→1.00 |
+
+3/3 real product runs hit target_score_reached. CLI + FastAPI both validated.
+Moving to production use: building real products with the arena.
 
 ---
 
 ### Metrics (cumulative)
 - Tests: 220 dashboard + 23 eval regression + E2E
 - Coverage: 84%
-- PRs merged: #1-#20
+- PRs merged: #1-#22
 - Stop conditions validated: plateau_stop, consecutive_discard_stop, target_score_reached, max_loops_reached
-- Products validated: TaskForge CLI, FastAPI Notes API, Bookmark Manager CLI, API Cost Tracker CLI
-- Standard profile (v0.6.1): 2/2 real product runs → target_score_reached
+- Products validated: TaskForge CLI, FastAPI Notes API, Bookmark Manager CLI, API Cost Tracker CLI, API Cost Tracker HTTP API
+- Standard profile (v0.6.1): 3/3 real product runs → target_score_reached
