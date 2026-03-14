@@ -44,10 +44,14 @@ weights:
 
 ## Hypothesis Sources
 
-- FEATURES.md, eval failures, coverage gaps, agent observations
+- FEATURES.md, eval failures, coverage gaps, EVALS/ledger.jsonl
 
 ## Arena Contract
 
+- **FIRST: Read EVALS/ledger.jsonl before choosing your hypothesis.**
+  Find the most recent entry. Check the "verdict" field.
+  If verdict was "discard_audit", your next hypothesis MUST reduce scope (fewer files).
+  Write your hypothesis as: "Last verdict: <verdict> | Response: <your adaptation>"
 - Choose exactly one baseline feature or one blocking defect per loop.
 - Before making changes, search the codebase. Do not assume missing implementation.
 - Do not create scratch, debug, or temp files.
