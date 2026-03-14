@@ -74,6 +74,63 @@ There is NO human in the loop during your execution. Follow these rules strictly
 - <any important observations or decisions>
 ```
 
+## Core Freeze Policy (v0.6.0, 2026-03-13)
+
+The harness core is **frozen**. This means:
+
+### Permitted harness changes
+1. **Evaluator integrity** — scoring accuracy bugs, baseline file format corrections
+2. **Rollback / concurrency / data-loss** — preventing workspace corruption or lost commits
+3. **Ledger schema stabilization** — additive schema changes that preserve backward compat
+
+### Not permitted without explicit unfreeze
+- Dashboard features or UI changes
+- OpenClaw / chat integration
+- New stop policies or loop variants
+- Subagent role complexity additions
+- New language/framework support
+- Any run-job.sh state machine changes outside the permitted list
+
+### What to work on instead
+The human-editable research surface is **PROGRAM.md**. Change arena rules there.
+Compare results using `scripts/compare-programs.sh` after running A/B experiments with
+`scripts/create-variant-jobs.sh`.
+
+---
+
+## Standard Operational Profile (v0.6.1, 2026-03-14)
+
+Validated across 8+ experiments. Use these settings for new product runs.
+
+### Default (production)
+```
+max_files_changed: 3
+max_files_created: 2
+max_diff_lines:    150
+max_discards_in_a_row: 3
+min_improvement_delta: 0.01
+max_plateau_loops: 2
+```
+Arena Contract **must** include:
+- Ledger-reading as first rule (read EVALS/ledger.jsonl before planning)
+- baseline-pinned feature_coverage (SCAFFOLD generates EVALS/features-baseline.json)
+
+### Experimental (A/B comparison only)
+```
+max_files_changed: 5
+max_files_created: 4
+max_diff_lines:    300
+max_discards_in_a_row: 5
+```
+Same ledger-read requirement. Use `scripts/create-variant-jobs.sh` to generate pairs.
+
+### Rationale
+- **Tight caps (3/2)**: enforce 1-feature-per-loop; agent never exceeded cap in v1 (9/9 KEEP)
+- **Ledger-read**: fixes PROGRESS.md rollback memory loss; DiscrRecovery 0→1 in v2.1
+- **Baseline-pinned**: prevents early stop via extra features; confirmed in bmark-cli-002 (13-feature baseline)
+
+---
+
 ## MCP Server Integration
 
 Two MCP servers are configured in `.claude/mcp_servers.json`:
