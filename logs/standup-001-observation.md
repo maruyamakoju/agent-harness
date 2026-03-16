@@ -1,0 +1,119 @@
+# standup-001 Observation Report
+## Experiment: Daily Standup Logger CLI
+## Date: 2026-03-16
+## Profile: Production (files=3/2, diff=200, discards=3, ledger-read first)
+## Duration: 2047s (~34 min)
+
+---
+
+## Results Summary
+
+| Loop | Verdict | Score | Hypothesis (truncated) |
+|------|---------|-------|------------------------|
+| 1 | ✓ keep | 0.2500→0.6750 | - Last verdict: none (loop 1, no ledger yet) / Response: proceed with... |
+| 2 | ✓ keep | 0.6750→0.7000 | - Last verdict: keep (loop 1, score 0.25→0.675) / Response: continue w... |
+| 3 | ✓ keep | 0.7000→0.7250 | - Last verdict: keep (loop 2, score 0.675→0.700) / Response: continue... |
+| 4 | ✓ keep | 0.7250→0.7500 | - Last verdict: keep (loop 3, score 0.700→0.725) / Response: continue... |
+| 5 | ✓ keep | 0.7500→0.7750 | - Last verdict: keep (loop 4, score 0.725→0.750) / Response: continue... |
+| 6 | ✓ keep | 0.7750→0.8000 | - Last verdict: keep (loop 5, score 0.750→0.775) / Response: continue... |
+| 7 | ✓ keep | 0.8000→0.8250 | - Last verdict: keep (loop 7, F-007 implemented) / Response: continue... |
+| 8 | ✓ keep | 0.8250→0.8500 | - Last verdict: keep (loop 7, F-007 implemented) / Response: continue... |
+
+Stop: `stopped at loop 8`.
+Final score: 0.8500
+
+---
+
+## Metrics
+
+| Metric | Value |
+|--------|-------|
+| Loops | 8 |
+| KEEPs | 8 (1.0000) |
+| Discards | 0 (0 audit, 0 regression) |
+| Duration | 2047s |
+| Score range | 0.2500→0.8500 |
+
+---
+
+## Feature Status
+
+| ID | Feature | Status |
+|----|---------|--------|
+| F-001 | Scaffold + SQLite init + `standup init` command | done |
+| F-002 | Log entry: `standup log` with --today/--tomorrow/--blockers/ | done |
+| F-003 | View entry: `standup show [--date | --last N]` |
+| F-004 | Weekly view: `standup week [--date YYYY-MM-DD]` | done |
+| F-005 | Filter list: `standup list [--tag] [--from] [--to]` | done |
+| F-006 | Search: `standup search <query>` | done |
+| F-007 | Stats: `standup stats [--week | --month]` |
+| F-008 | Export: `standup export [--format json | md] [--from] [--to] [--output FILE]` |
+
+**5/8 features done.**
+
+---
+
+## Loop Detail
+
+### Loop 1 — KEEP (keep)
+- Score: 0.2500 → 0.6750 (+0.4250)
+- Files: `FEATURES.md,PROGRESS.md,src/standup/main.py,tests/test_f001.py`
+- Wall: 358s
+- Hypothesis: - Last verdict: none (loop 1, no ledger yet) | Response: proceed with P0 feature - Feature: F-001 — DONE - Commit: 3d2f92c  
+
+### Loop 2 — KEEP (keep)
+- Score: 0.6750 → 0.7000 (+0.0250)
+- Files: `FEATURES.md,PROGRESS.md,src/standup/main.py,src/standup/py.typed,tests/test_f002.py`
+- Wall: 266s
+- Hypothesis: - Last verdict: keep (loop 1, score 0.25→0.675) | Response: continue with next P0 feature - Feature: F-002 — DONE - Commit: d9c2030  
+
+### Loop 3 — KEEP (keep)
+- Score: 0.7000 → 0.7250 (+0.0250)
+- Files: `FEATURES.md,PROGRESS.md,src/standup/main.py,tests/test_f003.py`
+- Wall: 331s
+- Hypothesis: - Last verdict: keep (loop 2, score 0.675→0.700) | Response: continue with next P0 feature - Feature: F-003 — DONE - Commit: c538f2e  
+
+### Loop 4 — KEEP (keep)
+- Score: 0.7250 → 0.7500 (+0.0250)
+- Files: `FEATURES.md,PROGRESS.md,src/standup/main.py,tests/test_f004.py`
+- Wall: 247s
+- Hypothesis: - Last verdict: keep (loop 3, score 0.700→0.725) | Response: continue with next P1 feature - Feature: F-004 — DONE - Commit: 9af3ca4  
+
+### Loop 5 — KEEP (keep)
+- Score: 0.7500 → 0.7750 (+0.0250)
+- Files: `FEATURES.md,PROGRESS.md,src/standup/main.py,tests/test_f005.py`
+- Wall: 203s
+- Hypothesis: - Last verdict: keep (loop 4, score 0.725→0.750) | Response: continue with next P1 feature - Feature: F-005 — DONE - Commit: 4b7da5f  
+
+### Loop 6 — KEEP (keep)
+- Score: 0.7750 → 0.8000 (+0.0250)
+- Files: `FEATURES.md,PROGRESS.md,src/standup/main.py,tests/test_f006.py`
+- Wall: 184s
+- Hypothesis: - Last verdict: keep (loop 5, score 0.750→0.775) | Response: continue with next P1 feature - Feature: F-006 — DONE - Commit: aed04a7  
+
+### Loop 7 — KEEP (keep)
+- Score: 0.8000 → 0.8250 (+0.0250)
+- Files: `FEATURES.md,PROGRESS.md,src/standup/main.py,tests/test_f007.py`
+- Wall: 263s
+- Hypothesis: - Last verdict: keep (loop 7, F-007 implemented) | Response: continue with next P2 feature - Feature: F-008 — Export (`standup export`) - Hypothesis: If we add an `export` Typer command with --forma
+
+### Loop 8 — KEEP (keep)
+- Score: 0.8250 → 0.8500 (+0.0250)
+- Files: `FEATURES.md,PROGRESS.md,src/standup/main.py,tests/test_f008.py`
+- Wall: 195s
+- Hypothesis: - Last verdict: keep (loop 7, F-007 implemented) | Response: continue with next P2 feature - Feature: F-008 — Export (`standup export`) - Hypothesis: If we add an `export` Typer command with --forma
+
+---
+
+## Arena Verdict
+
+| Criterion | Result |
+|-----------|--------|
+| 5+ loops stable forward progress | ✓ |
+| All discards recovered | — |
+| Target score reached | ✗ |
+| Human-legible hypothesis→verdict chain | ✓ |
+
+**Workspace**: `workspaces/standup-001/`
+
+*Auto-generated by scripts/generate-observation.py*
