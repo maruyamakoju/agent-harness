@@ -311,11 +311,29 @@ PATH="$HOME/bin:$PATH" costctl import data.csv
 
 ---
 
+---
+
+### Round 23: standup-001 + premature stop fix (2026-03-16)
+
+#### standup-001 — Daily Standup Logger CLI
+8/8 KEEP (keep_rate=1.0000), 0 discards. Best arena run to date.
+All 8 features done: init, log, show, week, list, search, stats, export.
+Score: 0.8500, Duration: 2047s (~34 min).
+Installed at ~/bin/standup, DB at ~/standup.db.
+
+#### Premature stop fix (b1dca45)
+Bug: PLAN and LOOP_CHECK stopped the run when all features were "done" even if
+score < target_score. standup-001 stopped at 0.85 (all features done, but
+tests/coverage not maximized). Fix: both check points now verify score >= target
+before stopping. Evaluator integrity fix (permitted under freeze).
+
+---
+
 ### Metrics (cumulative)
 - Tests: 220 dashboard + 23 eval regression + E2E
 - Coverage: 84%
-- PRs merged: #1-#23
+- PRs merged: #1-#24 + direct pushes
 - Stop conditions validated: plateau_stop, consecutive_discard_stop, target_score_reached, max_loops_reached
-- Products validated: TaskForge CLI, FastAPI Notes API, Bookmark Manager CLI, API Cost Tracker CLI, API Cost Tracker HTTP API, Daily Habit Tracker CLI
-- Standard profile (v0.6.1): 4/4 real product runs → target_score_reached
-- Production use phase: costctl at 0.9250 (F-001..F-006 incl. budget), installed and ready
+- Products validated: TaskForge CLI, FastAPI Notes API, Bookmark Manager CLI, API Cost Tracker CLI, API Cost Tracker HTTP API, Daily Habit Tracker CLI, Daily Standup Logger CLI
+- Standard profile (v0.6.1 → v0.6.2): diff_lines=200 confirmed, premature stop fix applied
+- Production use phase: standup at 0.85 (8/8 features), costctl at 0.925 (6/8 features)
