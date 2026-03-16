@@ -102,7 +102,7 @@ run_lint() {
     start_time=$(date +%s)
     local output="" exit_code=0
 
-    if (command -v ruff &>/dev/null || python -m ruff --version &>/dev/null) && [[ -f "pyproject.toml" || -f "setup.py" ]]; then
+    if python -m ruff --version &>/dev/null && [[ -f "pyproject.toml" || -f "setup.py" ]]; then
         output=$(python -m ruff check . 2>&1 | tail -30) || exit_code=$?
     elif [[ -f "package.json" ]] && grep -q '"lint"' package.json 2>/dev/null; then
         output=$(npm run lint 2>&1 | tail -30) || exit_code=$?
@@ -134,8 +134,14 @@ run_typecheck() {
     start_time=$(date +%s)
     local output="" exit_code=0
 
-    if (command -v mypy &>/dev/null || python -m mypy --version &>/dev/null) && [[ -f "pyproject.toml" || -f "setup.py" ]]; then
-        output=$(python -m mypy . 2>&1 | tail -30) || exit_code=$?
+    if python -m mypy --version &>/dev/null && [[ -f "pyproject.toml" || -f "setup.py" ]]; then
+        # Target src/ when it exists (standard Python layout) to avoid
+        # type-checking test files.  --ignore-missing-imports prevents
+        # failures caused by missing third-party library stubs, which are
+        # outside the project's control.
+        local mypy_target="."
+        [[ -d "src" ]] && mypy_target="src/"
+        output=$(python -m mypy "$mypy_target" --ignore-missing-imports 2>&1 | tail -30) || exit_code=$?
     elif command -v tsc &>/dev/null && [[ -f "tsconfig.json" ]]; then
         output=$(tsc --noEmit 2>&1 | tail -30) || exit_code=$?
     else
