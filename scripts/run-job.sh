@@ -1679,11 +1679,19 @@ PROMPT
         log "INFO" "PLAN completed (loop $LOOP_COUNT)"
         log_json "plan_done" "loop=$LOOP_COUNT"
 
-        # Check if all features are done
+        # Check if all features are done — but only stop if score >= target
         if [[ -f "$WORKSPACE/PROGRESS.md" ]] && \
            grep -qi "ALL FEATURES COMPLETE" "$WORKSPACE/PROGRESS.md" 2>/dev/null; then
-            log "INFO" "Planner says all features complete"
-            STATE="PUSH"
+            local score_met
+            score_met=$(awk "BEGIN { print ($SCORE_BEFORE >= $TARGET_SCORE) ? 1 : 0 }")
+            if [[ "$score_met" -eq 1 ]]; then
+                log "INFO" "Planner says all features complete and score >= target ($SCORE_BEFORE >= $TARGET_SCORE)"
+                STATE="PUSH"
+            else
+                log "INFO" "Planner says all features complete but score below target ($SCORE_BEFORE < $TARGET_SCORE) — continuing to CODE for quality improvements"
+                log_state_transition "PLAN" "CODE"
+                STATE="CODE"
+            fi
         else
             log_state_transition "PLAN" "CODE"
             STATE="CODE"
@@ -2134,15 +2142,21 @@ state_loop_check() {
         return
     fi
 
-    # Check if all features are done
+    # Check if all features are done — but only stop if score >= target
     if [[ -f "$WORKSPACE/FEATURES.md" ]]; then
         local remaining_features
         remaining_features=$(grep -c 'not-started\|in-progress' "$WORKSPACE/FEATURES.md" 2>/dev/null || echo "0")
         if [[ "$remaining_features" -eq 0 ]]; then
-            log "INFO" "All features completed!"
-            log_json "all_features_done" "loop=$LOOP_COUNT"
-            STATE="PUSH"
-            return
+            local score_met
+            score_met=$(awk "BEGIN { print ($SCORE_AFTER >= $TARGET_SCORE) ? 1 : 0 }")
+            if [[ "$score_met" -eq 1 ]]; then
+                log "INFO" "All features completed and score >= target ($SCORE_AFTER >= $TARGET_SCORE)"
+                log_json "all_features_done" "loop=$LOOP_COUNT"
+                STATE="PUSH"
+                return
+            else
+                log "INFO" "All features done but score below target ($SCORE_AFTER < $TARGET_SCORE) — continuing for quality improvements"
+            fi
         fi
     fi
 
