@@ -957,6 +957,162 @@ test_parallel_lock() {
 }
 
 # ---------------------------------------------------------------------------
+# Test 13: Continuation flow — continue from existing workspace
+# ---------------------------------------------------------------------------
+test_continuation_flow() {
+    echo ""
+    echo "=== Test 13: Continuation Flow (CONTINUE_REPO → extend → DONE) ==="
+    TESTS_RUN=$((TESTS_RUN + 1))
+
+    local test_dir
+    test_dir=$(setup_test_env "continuation_flow")
+    local harness_dir="$test_dir/harness"
+    local workspaces_dir="$test_dir/workspaces"
+    local jobs_dir="$harness_dir/jobs"
+
+    # --- Phase 1: Create a "source" workspace simulating a completed run ---
+    local source_id="source-product"
+    local source_workspace="$workspaces_dir/$source_id"
+    mkdir -p "$source_workspace"
+    cd "$source_workspace"
+
+    git init 2>/dev/null
+    git config user.name "Test" 2>/dev/null
+    git config user.email "test@test.local" 2>/dev/null
+
+    # Create source files (simulating a completed 4-feature product)
+    cat > "$source_workspace/FEATURES.md" <<'SRCF'
+# Features — Source Product
+
+| ID    | Feature             | Priority | Status |
+|-------|---------------------|----------|--------|
+| F-001 | Core setup          | P0       | done   |
+| F-002 | Basic API           | P0       | done   |
+| F-003 | Authentication      | P1       | done   |
+| F-004 | Documentation       | P2       | done   |
+
+### Backlog
+_(none)_
+SRCF
+
+    cat > "$source_workspace/PROGRESS.md" <<'SRCP'
+# Progress — Source Product
+
+## Day: 0
+## Status: COMPLETED
+
+ALL FEATURES COMPLETE
+SRCP
+
+    mkdir -p "$source_workspace/src"
+    cat > "$source_workspace/src/main.py" <<'SRCM'
+# Main module from source run
+def main():
+    return "hello from source"
+SRCM
+
+    mkdir -p "$source_workspace/EVALS"
+    echo '{"loop":4,"verdict":"keep","score_after":"1.0000"}' > "$source_workspace/EVALS/ledger.jsonl"
+    echo '{"feature_ids":["F-001","F-002","F-003","F-004"],"frozen_at":"2026-01-01T00:00:00Z","source":"SCAFFOLD"}' \
+        > "$source_workspace/EVALS/features-baseline.json"
+    # Add a stale eval result that should be cleaned up
+    echo '{"type":"unit","pass":true}' > "$source_workspace/EVALS/unit-old.json"
+
+    git add -A 2>/dev/null
+    git commit -m "chore: source workspace complete" 2>/dev/null
+
+    # --- Phase 2: Create continuation job ---
+    local cont_id="test-cont-$(date +%s)-$$"
+    local job_file="$jobs_dir/running/${cont_id}.json"
+    mkdir -p "$jobs_dir/running"
+
+    local new_features='| F-005 | Export feature       | P0       | not-started  |\n| F-006 | Import feature       | P0       | not-started  |'
+
+    jq -cn \
+        --arg id "$cont_id" \
+        --arg continue_from "$source_id" \
+        --arg new_features "$new_features" \
+        '{
+            id: $id,
+            repo: "local://continue",
+            base_ref: "main",
+            work_branch: "forge/continuation-test",
+            task: "Extend the source product with export and import features",
+            time_budget_sec: 3600,
+            mode: "product",
+            product_name: "Source Product Extended",
+            max_loops: 4,
+            continue_from: $continue_from,
+            new_features: $new_features,
+            commands: {
+                continue_setup: ["echo setup-for-continuation"],
+                test: ["true"]
+            }
+        }' > "$job_file"
+
+    # --- Phase 3: Run continuation job ---
+    local exit_code=0
+    CLAUDE_MOCK=true \
+    HARNESS_DIR="$harness_dir" \
+    WORKSPACES_DIR="$workspaces_dir" \
+        timeout 60 bash "$harness_dir/scripts/run-job.sh" "$job_file" \
+        > "$test_dir/stdout.log" 2>&1 || exit_code=$?
+
+    local workspace="$workspaces_dir/$cont_id"
+    local jsonl_file="$harness_dir/logs/${cont_id}.jsonl"
+
+    # --- Phase 4: Assertions ---
+
+    # Job should complete
+    assert_equals "0" "$exit_code" "continuation job exits 0 (DONE)"
+
+    # Source code preserved
+    assert_file_exists "$workspace/src/main.py" "source code preserved in continuation workspace"
+    assert_file_contains "$workspace/src/main.py" "hello from source" "source code content intact"
+
+    # Done features preserved in FEATURES.md
+    assert_file_contains "$workspace/FEATURES.md" "F-001" "F-001 preserved in FEATURES.md"
+    assert_file_contains "$workspace/FEATURES.md" "F-004" "F-004 preserved in FEATURES.md"
+
+    # New features added to FEATURES.md
+    assert_file_contains "$workspace/FEATURES.md" "F-005" "new feature F-005 added"
+    assert_file_contains "$workspace/FEATURES.md" "F-006" "new feature F-006 added"
+
+    # Baseline regenerated with ALL features (old + new)
+    assert_file_exists "$workspace/EVALS/features-baseline.json" "baseline regenerated"
+    assert_file_contains "$workspace/EVALS/features-baseline.json" "F-005" "baseline includes new F-005"
+    assert_file_contains "$workspace/EVALS/features-baseline.json" "SCAFFOLD_CONTINUE" "baseline source is SCAFFOLD_CONTINUE"
+
+    # Stale eval results cleaned (but ledger kept)
+    assert_file_exists "$workspace/EVALS/ledger.jsonl" "ledger.jsonl preserved from source"
+    if [[ ! -f "$workspace/EVALS/unit-old.json" ]]; then
+        pass "stale eval result unit-old.json cleaned up"
+    else
+        fail "stale eval result unit-old.json should have been deleted"
+    fi
+
+    # Correct branch
+    local branch
+    branch=$(git -C "$workspace" branch --show-current 2>/dev/null)
+    assert_equals "forge/continuation-test" "$branch" "correct work branch"
+
+    # Source workspace NOT modified (no origin remote in continuation)
+    if ! git -C "$workspace" remote get-url origin 2>/dev/null; then
+        pass "origin remote removed (source protected)"
+    else
+        fail "origin remote still exists — source not protected"
+    fi
+
+    # CONTINUE_REPO event logged
+    assert_file_contains "$jsonl_file" "continue_repo_success" "continue_repo_success event logged"
+
+    # SCAFFOLD_CONTINUE event logged
+    assert_file_contains "$jsonl_file" "scaffold_continue_start" "scaffold_continue_start event logged"
+
+    cleanup_test_env "$test_dir"
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 main() {
@@ -980,6 +1136,7 @@ main() {
     test_target_score_stop
     test_plateau_stop
     test_parallel_lock
+    test_continuation_flow
 
     echo ""
     echo "============================================"

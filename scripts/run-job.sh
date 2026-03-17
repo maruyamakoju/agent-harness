@@ -56,6 +56,9 @@ PRODUCT_NAME=$(jq -r '.product_name // ""' "$JOB_FILE")
 MAX_LOOPS=$(jq -r '.max_loops // 10' "$JOB_FILE")
 CREATE_REPO=$(jq -r '.create_repo // false' "$JOB_FILE")
 DAY_PLAN_JSON=$(jq -r '.day_plan // null' "$JOB_FILE")
+CONTINUE_FROM=$(jq -r '.continue_from // ""' "$JOB_FILE")
+NEW_FEATURES_MD=$(jq -r '.new_features // ""' "$JOB_FILE")
+CONTINUE_SETUP_CMDS=$(jq -r '.commands.continue_setup // [] | .[]' "$JOB_FILE")
 CURRENT_DAY=0
 LOOP_COUNT=0
 TEMPLATES_DIR="${HARNESS_DIR}/templates/product-state"
@@ -163,7 +166,41 @@ _mock_claude_response() {
             if [[ "${MOCK_SCAFFOLD_FAIL:-false}" == "true" ]]; then
                 return 1
             fi
-            # Simulate Claude customizing the scaffold files
+
+            # Continuation mode: extend existing FEATURES.md instead of replacing
+            if [[ -n "${CONTINUE_FROM:-}" && -f "$WORKSPACE/FEATURES.md" ]]; then
+                # If no new features were appended by harness, add mock ones
+                if ! grep -q "not-started" "$WORKSPACE/FEATURES.md" 2>/dev/null; then
+                    local max_id
+                    max_id=$(grep -oE 'F-[0-9]+' "$WORKSPACE/FEATURES.md" 2>/dev/null \
+                        | sed 's/F-//' | sort -n | tail -1)
+                    max_id="${max_id:-0}"
+                    local next1=$((10#$max_id + 1))
+                    local next2=$((10#$max_id + 2))
+                    printf '| F-%03d | Extended feature 1  | P0       | not-started  |\n' "$next1" >> "$WORKSPACE/FEATURES.md"
+                    printf '| F-%03d | Extended feature 2  | P0       | not-started  |\n' "$next2" >> "$WORKSPACE/FEATURES.md"
+                fi
+
+                # Update PROGRESS.md for continuation
+                cat > "$WORKSPACE/PROGRESS.md" <<PEOF
+# Progress — Mock Product (Continuation from ${CONTINUE_FROM})
+
+## Day: 0
+## Status: IN_PROGRESS
+
+### Current Focus
+_(continuation — extending product)_
+
+### Completed
+_(features from previous run preserved)_
+PEOF
+
+                git add -A 2>/dev/null
+                git commit -m "chore(scaffold): extend product for continuation from ${CONTINUE_FROM}" 2>/dev/null || true
+                return 0
+            fi
+
+            # Fresh scaffold: simulate Claude customizing the scaffold files
             cat > "$WORKSPACE/FEATURES.md" <<'FEOF'
 # Features — Mock Product
 
@@ -883,14 +920,20 @@ state_setup() {
         next_state="SCAFFOLD"
     fi
 
-    if [[ -z "$SETUP_CMDS" ]]; then
+    # For continuation runs, use continue_setup commands (or skip if none)
+    local cmds="$SETUP_CMDS"
+    if [[ -n "$CONTINUE_FROM" ]]; then
+        cmds="$CONTINUE_SETUP_CMDS"
+    fi
+
+    if [[ -z "$cmds" ]]; then
         log "INFO" "No setup commands defined, skipping"
         log_state_transition "SETUP" "$next_state"
         STATE="$next_state"
         return
     fi
 
-    log_json "setup_start" "commands=$(echo "$SETUP_CMDS" | wc -l)"
+    log_json "setup_start" "commands=$(echo "$cmds" | wc -l)"
 
     local cmd
     while IFS= read -r cmd; do
@@ -904,7 +947,7 @@ state_setup() {
             STATE="FAILED"
             return
         fi
-    done <<< "$SETUP_CMDS"
+    done <<< "$cmds"
 
     log_json "setup_success" ""
     log_state_transition "SETUP" "$next_state"
@@ -1344,37 +1387,103 @@ state_scaffold() {
     local ts
     ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-    # Copy template files
-    if [[ -d "$TEMPLATES_DIR" ]]; then
-        cp -r "$TEMPLATES_DIR/TASKS" "$WORKSPACE/" 2>/dev/null || true
-        cp -r "$TEMPLATES_DIR/SPECS" "$WORKSPACE/" 2>/dev/null || true
-        cp -r "$TEMPLATES_DIR/EVALS" "$WORKSPACE/" 2>/dev/null || true
+    # --- Continuation mode: extend existing workspace ---
+    if [[ -n "$CONTINUE_FROM" ]]; then
+        log "INFO" "SCAFFOLD_CONTINUE: extending existing product from $CONTINUE_FROM"
+        log_json "scaffold_continue_start" "continue_from=$CONTINUE_FROM"
 
-        for f in AGENT.md PROGRESS.md FEATURES.md DECISIONS.md RUNBOOK.md PROGRAM.md init.sh; do
-            if [[ -f "$TEMPLATES_DIR/$f" ]]; then
-                sed -e "s|{{PRODUCT_NAME}}|$PRODUCT_NAME|g" \
-                    -e "s|{{TIMESTAMP}}|$ts|g" \
-                    -e "s|{{MAX_LOOPS}}|$MAX_LOOPS|g" \
-                    -e "s|{{TIME_BUDGET}}|$TIME_BUDGET|g" \
-                    "$TEMPLATES_DIR/$f" > "$WORKSPACE/$f"
+        # Skip template copying — files already exist from source workspace
+
+        # Append new features to FEATURES.md if provided
+        if [[ -n "$NEW_FEATURES_MD" && -f "$WORKSPACE/FEATURES.md" ]]; then
+            # Insert new features before "### Backlog" line, or append at end
+            if grep -q "^### Backlog" "$WORKSPACE/FEATURES.md" 2>/dev/null; then
+                # Insert before Backlog section
+                local tmp_features
+                tmp_features=$(mktemp)
+                awk -v new_features="$NEW_FEATURES_MD" '
+                    /^### Backlog/ { print new_features; print "" }
+                    { print }
+                ' "$WORKSPACE/FEATURES.md" > "$tmp_features"
+                mv "$tmp_features" "$WORKSPACE/FEATURES.md"
+            else
+                # Append at end
+                echo "" >> "$WORKSPACE/FEATURES.md"
+                echo "$NEW_FEATURES_MD" >> "$WORKSPACE/FEATURES.md"
             fi
-        done
-        chmod +x "$WORKSPACE/init.sh" 2>/dev/null || true
+            log "INFO" "SCAFFOLD_CONTINUE: appended new features to FEATURES.md"
+        fi
 
-    fi
+        # Invoke Claude for continuation scaffold (extend, not replace)
+        local scaffold_prompt
+        scaffold_prompt=$(cat <<PROMPT
+You are an autonomous coding agent in Product Mode (CONTINUATION).
+You are extending an existing product: ${PRODUCT_NAME}
 
-    # Protect product state files from .gitignore (they SHOULD be committed)
-    # Remove agent-internal lines if present, then add product state tracking
-    {
-        echo ""
-        echo "# Agent-internal files (auto-added by agent harness)"
-        echo "requirements.json"
-        echo "claude-progress.txt"
-    } >> "$WORKSPACE/.gitignore" 2>/dev/null || true
+## Task
+${TASK}
 
-    # Ask Claude to customize the scaffold for this specific product
-    local scaffold_prompt
-    scaffold_prompt=$(cat <<PROMPT
+## IMPORTANT: This is a continuation run
+- This workspace has existing code and done features from a previous run.
+- Do NOT modify, rewrite, or re-implement any features marked "done" in FEATURES.md.
+- Do NOT overwrite existing source code files.
+- FEATURES.md may already have new features appended (status: not-started).
+
+## Your Job Right Now
+1. Read FEATURES.md — note which features are "done" and which are "not-started".
+2. If no new "not-started" features exist, add 4-8 new features that extend the product.
+   Use the next available F-NNN IDs. Set them to "not-started".
+3. Update PROGRESS.md to reflect the continuation:
+   - Note this is a continuation from ${CONTINUE_FROM}
+   - List done features as completed
+   - Set status to IN_PROGRESS for the next phase
+4. Do NOT start implementing features yet. Only update scaffold files.
+5. Commit with: chore(scaffold): extend product for continuation from ${CONTINUE_FROM}
+PROMPT
+        )
+
+        if invoke_claude "$scaffold_prompt"; then
+            log "INFO" "SCAFFOLD_CONTINUE completed"
+            log_json "scaffold_continue_success" "product=$PRODUCT_NAME"
+        else
+            log "WARN" "SCAFFOLD_CONTINUE Claude invocation failed"
+            log_json "scaffold_continue_fallback" "using existing files"
+        fi
+
+    else
+        # --- Fresh scaffold: copy templates and invoke Claude ---
+
+        # Copy template files
+        if [[ -d "$TEMPLATES_DIR" ]]; then
+            cp -r "$TEMPLATES_DIR/TASKS" "$WORKSPACE/" 2>/dev/null || true
+            cp -r "$TEMPLATES_DIR/SPECS" "$WORKSPACE/" 2>/dev/null || true
+            cp -r "$TEMPLATES_DIR/EVALS" "$WORKSPACE/" 2>/dev/null || true
+
+            for f in AGENT.md PROGRESS.md FEATURES.md DECISIONS.md RUNBOOK.md PROGRAM.md init.sh; do
+                if [[ -f "$TEMPLATES_DIR/$f" ]]; then
+                    sed -e "s|{{PRODUCT_NAME}}|$PRODUCT_NAME|g" \
+                        -e "s|{{TIMESTAMP}}|$ts|g" \
+                        -e "s|{{MAX_LOOPS}}|$MAX_LOOPS|g" \
+                        -e "s|{{TIME_BUDGET}}|$TIME_BUDGET|g" \
+                        "$TEMPLATES_DIR/$f" > "$WORKSPACE/$f"
+                fi
+            done
+            chmod +x "$WORKSPACE/init.sh" 2>/dev/null || true
+
+        fi
+
+        # Protect product state files from .gitignore (they SHOULD be committed)
+        # Remove agent-internal lines if present, then add product state tracking
+        {
+            echo ""
+            echo "# Agent-internal files (auto-added by agent harness)"
+            echo "requirements.json"
+            echo "claude-progress.txt"
+        } >> "$WORKSPACE/.gitignore" 2>/dev/null || true
+
+        # Ask Claude to customize the scaffold for this specific product
+        local scaffold_prompt
+        scaffold_prompt=$(cat <<PROMPT
 You are an autonomous coding agent in Product Mode. You are building: ${PRODUCT_NAME}
 
 ## Task
@@ -1403,14 +1512,15 @@ Customize the product scaffold files for this specific product:
 
 7. Commit all changes with: chore(scaffold): initialize product state for ${PRODUCT_NAME}
 PROMPT
-    )
+        )
 
-    if invoke_claude "$scaffold_prompt"; then
-        log "INFO" "Scaffold completed"
-        log_json "scaffold_success" "product=$PRODUCT_NAME"
-    else
-        log "WARN" "Scaffold Claude invocation failed, using template defaults"
-        log_json "scaffold_fallback" "using template defaults"
+        if invoke_claude "$scaffold_prompt"; then
+            log "INFO" "Scaffold completed"
+            log_json "scaffold_success" "product=$PRODUCT_NAME"
+        else
+            log "WARN" "Scaffold Claude invocation failed, using template defaults"
+            log_json "scaffold_fallback" "using template defaults"
+        fi
     fi
 
     # Apply job-defined PROGRAM.md override AFTER Claude (Claude may have reset it to template defaults)
@@ -1423,6 +1533,7 @@ PROMPT
     fi
 
     # Freeze baseline feature list for immutable scoring denominator
+    # For continuation: regenerate with ALL features (old done + new not-started)
     if [[ -f "$WORKSPACE/FEATURES.md" ]]; then
         mkdir -p "$WORKSPACE/EVALS"
         local baseline_ids
@@ -1430,17 +1541,21 @@ PROMPT
             | sed 's/^| //' | PATH="$HOME/bin:$PATH" jq -R -s 'split("\n") | map(select(length > 0))' 2>/dev/null || echo '[]')
         local baseline_count
         baseline_count=$(echo "$baseline_ids" | PATH="$HOME/bin:$PATH" jq 'length' 2>/dev/null || echo 0)
+        local baseline_source="SCAFFOLD"
+        [[ -n "$CONTINUE_FROM" ]] && baseline_source="SCAFFOLD_CONTINUE"
         cat > "$WORKSPACE/EVALS/features-baseline.json" <<FBEOF
-{"feature_ids":${baseline_ids},"frozen_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","source":"SCAFFOLD"}
+{"feature_ids":${baseline_ids},"frozen_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","source":"${baseline_source}"}
 FBEOF
-        log "INFO" "SCAFFOLD: frozen baseline with $baseline_count feature IDs"
+        log "INFO" "SCAFFOLD: frozen baseline with $baseline_count feature IDs (source=$baseline_source)"
     fi
 
     # Ensure scaffold files are committed (Claude's commit may have been permission-denied)
     cd "$WORKSPACE"
     git add -A 2>/dev/null || true
     if ! git diff --cached --quiet 2>/dev/null; then
-        git commit -m "chore(scaffold): initialize product state for ${PRODUCT_NAME}" 2>/dev/null || true
+        local commit_msg="chore(scaffold): initialize product state for ${PRODUCT_NAME}"
+        [[ -n "$CONTINUE_FROM" ]] && commit_msg="chore(scaffold): extend product for continuation from ${CONTINUE_FROM}"
+        git commit -m "$commit_msg" 2>/dev/null || true
         log "INFO" "Scaffold files committed by harness"
     fi
 
@@ -2028,7 +2143,7 @@ state_ledger() {
     local hypothesis=""
     if [[ -f "$WORKSPACE/PROGRESS.md" ]]; then
         hypothesis=$(sed -n '/^### Hypothesis/,/^### /p' "$WORKSPACE/PROGRESS.md" 2>/dev/null \
-            | grep -v '^### ' | head -5 | tr '\n' ' ' | head -c 200)
+            | { grep -v '^### ' || true; } | head -5 | tr '\n' ' ' | head -c 200)
     fi
 
     # Compute wall seconds for this loop
@@ -2145,7 +2260,8 @@ state_loop_check() {
     # Check if all features are done — but only stop if score >= target
     if [[ -f "$WORKSPACE/FEATURES.md" ]]; then
         local remaining_features
-        remaining_features=$(grep -c 'not-started\|in-progress' "$WORKSPACE/FEATURES.md" 2>/dev/null || echo "0")
+        remaining_features=$(grep -c 'not-started\|in-progress' "$WORKSPACE/FEATURES.md" 2>/dev/null || true)
+        remaining_features="${remaining_features:-0}"
         if [[ "$remaining_features" -eq 0 ]]; then
             local score_met
             score_met=$(awk "BEGIN { print ($SCORE_AFTER >= $TARGET_SCORE) ? 1 : 0 }")
@@ -2277,6 +2393,55 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# State: CONTINUE_REPO — clone an existing workspace for continuation runs
+# ---------------------------------------------------------------------------
+state_continue_repo() {
+    local source_workspace="${WORKSPACES_DIR}/${CONTINUE_FROM}"
+
+    log "INFO" "Continuing from workspace: $source_workspace"
+    log_json "continue_repo_start" "continue_from=$CONTINUE_FROM"
+
+    # Validate source workspace exists and has a git repo
+    if [[ ! -d "$source_workspace/.git" ]]; then
+        log "ERROR" "Source workspace not found or not a git repo: $source_workspace"
+        log_json "continue_repo_failed" "source=$source_workspace reason=not_found"
+        STATE="FAILED"
+        return
+    fi
+
+    # Clone source workspace (full history) to new workspace
+    if git clone "$source_workspace" "$WORKSPACE" 2>&1 | tee -a "$JOB_LOG"; then
+        cd "$WORKSPACE"
+
+        # Configure git user
+        git config user.name "Autonomous Agent" 2>/dev/null
+        git config user.email "agent@autonomous-coding-agent.local" 2>/dev/null
+
+        # Remove origin remote (prevent accidental writes back to source)
+        git remote remove origin 2>/dev/null || true
+
+        # Create new work branch from current HEAD
+        git checkout -b "$WORK_BRANCH" 2>&1 | tee -a "$JOB_LOG"
+
+        # Delete stale eval result files (keep ledger.jsonl for agent context)
+        if [[ -d "$WORKSPACE/EVALS" ]]; then
+            find "$WORKSPACE/EVALS" -name "*.json" -not -name "features-baseline.json" -delete 2>/dev/null || true
+            log "INFO" "CONTINUE_REPO: cleaned stale eval results (kept ledger.jsonl)"
+        fi
+
+        LAST_COMMIT_HASH=$(git rev-parse HEAD 2>/dev/null || echo "")
+        log "INFO" "CONTINUE_REPO: workspace cloned, branch=$WORK_BRANCH, HEAD=$LAST_COMMIT_HASH"
+        log_json "continue_repo_success" "branch=$WORK_BRANCH commit=$LAST_COMMIT_HASH"
+        log_state_transition "CONTINUE_REPO" "SETUP"
+        STATE="SETUP"
+    else
+        log "ERROR" "Failed to clone source workspace: $source_workspace"
+        log_json "continue_repo_failed" "reason=clone_failed"
+        STATE="FAILED"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Cleanup workspace
 # ---------------------------------------------------------------------------
 cleanup() {
@@ -2312,13 +2477,18 @@ main() {
         log "INFO" "Product: $PRODUCT_NAME"
         log "INFO" "Max loops: $MAX_LOOPS"
         log "INFO" "Create repo: $CREATE_REPO"
+        if [[ -n "$CONTINUE_FROM" ]]; then
+            log "INFO" "Continue from: $CONTINUE_FROM"
+        fi
     fi
     log "INFO" "=========================================="
     log_json "job_start" "repo=$REPO task=$TASK budget=${TIME_BUDGET}s mode=$MODE"
     fire_webhooks "job_start" || true
 
-    # Product mode: use CREATE_REPO state instead of CLONE if --create-repo
-    if [[ "$MODE" == "product" && "$CREATE_REPO" == "true" ]]; then
+    # Product mode: determine initial state
+    if [[ "$MODE" == "product" && -n "$CONTINUE_FROM" ]]; then
+        STATE="CONTINUE_REPO"
+    elif [[ "$MODE" == "product" && "$CREATE_REPO" == "true" ]]; then
         STATE="CREATE_REPO"
     fi
 
@@ -2342,6 +2512,7 @@ main() {
         case "$STATE" in
             CLONE)      state_clone ;;
             CREATE_REPO) state_create_repo ;;
+            CONTINUE_REPO) state_continue_repo ;;
             SETUP)      state_setup ;;
             INIT)       state_init  ;;
             CODE)
