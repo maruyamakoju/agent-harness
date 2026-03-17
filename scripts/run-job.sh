@@ -2450,7 +2450,7 @@ cleanup() {
     log_json "cleanup" "duration=${elapsed}s iterations=${ITERATION} cost=${TOTAL_COST_USD}"
 
     if [[ -d "$WORKSPACE" ]]; then
-        if [[ "${CLAUDE_MOCK:-false}" == "true" || "${PRESERVE_WORKSPACE:-false}" == "true" ]]; then
+        if [[ "${CLAUDE_MOCK:-false}" == "true" || "${PRESERVE_WORKSPACE:-false}" == "true" || "$MODE" == "product" ]]; then
             log "INFO" "Preserving workspace for inspection: $WORKSPACE"
         else
             log "INFO" "Removing workspace: $WORKSPACE"

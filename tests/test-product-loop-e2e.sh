@@ -13,6 +13,16 @@
 # =============================================================================
 set -euo pipefail
 
+# On Windows/MSYS2, the inherited PATH can be 8K+ chars. When bash forks
+# child processes with additional env vars, the oversized environment block
+# gets corrupted (PATH truncated to "/bin:"). Compact PATH to essentials.
+if [[ "$(uname -o 2>/dev/null || true)" == "Msys" ]]; then
+    _CLEAN_PATH="/mingw64/bin:/usr/bin:/bin"
+    [[ -d "$HOME/bin" ]] && _CLEAN_PATH="$HOME/bin:$_CLEAN_PATH"
+    export PATH="$_CLEAN_PATH"
+    unset _CLEAN_PATH
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
