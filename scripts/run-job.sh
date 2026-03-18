@@ -6,14 +6,6 @@
 # =============================================================================
 set -euo pipefail
 
-# On Windows/MSYS2, compact PATH to prevent environment block corruption
-if [[ "$(uname -o 2>/dev/null || true)" == "Msys" ]]; then
-    _CLEAN_PATH="/mingw64/bin:/usr/bin:/bin"
-    [[ -d "$HOME/bin" ]] && _CLEAN_PATH="$HOME/bin:$_CLEAN_PATH"
-    export PATH="$_CLEAN_PATH"
-    unset _CLEAN_PATH
-fi
-
 # Resolve to absolute path so persist_loop_state() works after cd "$WORKSPACE"
 JOB_FILE="$1"
 [[ "$JOB_FILE" != /* ]] && JOB_FILE="$(pwd)/$JOB_FILE"
