@@ -17,12 +17,12 @@ Each loop must produce a small, testable increment — not a large batch.
 ## Eval Protocol
 
 weights:
-  tests: 0.35
-  lint: 0.20
-  typecheck: 0.15
-  coverage: 0.05
+  tests: 0.30
+  lint: 0.15
+  typecheck: 0.10
+  coverage: 0.15
   security: 0.05
-  feature_coverage: 0.20
+  feature_coverage: 0.25
 
 ## Keep/Discard Policy
 
@@ -61,3 +61,17 @@ weights:
 - KEEP only if score improves and audit passes.
 - If tests break, fix them in the SAME loop before moving on.
 - Prefer depth (thorough tests for one feature) over breadth (many features with no tests).
+
+## Quality Requirements
+
+- **Edge-case tests mandatory**: Every feature MUST include at least one test for invalid input,
+  empty results, or boundary conditions (e.g., bad date format, missing required arg, zero items).
+- **Input validation**: All user-facing commands must validate arguments and print a clear,
+  actionable error message for bad input. Never let exceptions propagate as raw tracebacks.
+- **Modular code**: When source exceeds 150 lines, split into separate modules
+  (e.g., db.py for database, cli.py for commands, models.py for data types).
+  One monolithic file is not acceptable.
+- **pytest-cov required**: Include `pytest-cov` in dev dependencies. Coverage is measured
+  automatically — aim for ≥80% line coverage.
+- **Database indexes**: Add indexes on columns used in WHERE/ORDER BY clauses
+  (e.g., project, date, status). Full table scans are not acceptable for query features.

@@ -51,3 +51,15 @@ Types: feat, fix, test, refactor, docs, chore
 - No known security vulnerabilities (run security checks if available)
 - Code should follow the project's existing style and conventions
 - Stay within mutation caps defined in PROGRAM.md
+
+### Code Quality (Non-Negotiable)
+
+1. **Modular architecture**: Separate database layer (db.py), CLI commands (cli.py or main.py),
+   and data models (models.py). Do NOT put everything in one file.
+2. **Input validation**: Every user-facing command must validate its arguments. Use try/except
+   with clear error messages. Never expose raw Python tracebacks to the user.
+3. **Edge-case tests**: Each feature must have at least one test for invalid input or boundary
+   conditions (e.g., bad date, empty list, missing required field).
+4. **Database indexes**: Add CREATE INDEX statements for columns used in WHERE or ORDER BY.
+5. **pytest-cov**: Always include `pytest-cov` in `[project.optional-dependencies] dev`.
+   The harness measures coverage automatically — target ≥80%.

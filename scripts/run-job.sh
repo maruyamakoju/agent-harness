@@ -2056,6 +2056,29 @@ state_code_audit() {
         fi
     fi
 
+    # Structure gate: Python monolith detection
+    # If src/<pkg>/ has total LOC > 150 in a single implementation file, reject.
+    # Rule: total LOC > 150 AND impl files (excl __init__.py) < 2 → violation
+    if [[ -z "$violation" ]]; then
+        local src_dir="$WORKSPACE/src"
+        if [[ -d "$src_dir" ]]; then
+            local pkg_dir
+            pkg_dir=$(find "$src_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1)
+            if [[ -n "$pkg_dir" ]]; then
+                local impl_files impl_count total_loc
+                impl_files=$(find "$pkg_dir" -maxdepth 1 -name '*.py' ! -name '__init__.py' -type f 2>/dev/null)
+                impl_count=$(echo "$impl_files" | grep -c '\.py$' 2>/dev/null || echo 0)
+                total_loc=0
+                if [[ -n "$impl_files" ]]; then
+                    total_loc=$(cat $impl_files 2>/dev/null | wc -l | tr -d ' ')
+                fi
+                if [[ "$total_loc" -gt 150 && "$impl_count" -lt 2 ]]; then
+                    violation="structure_monolith: ${total_loc} LOC in ${impl_count} file(s) (split required >150 LOC)"
+                fi
+            fi
+        fi
+    fi
+
     if [[ -n "$violation" ]]; then
         log "WARN" "CODE_AUDIT: cap violation — $violation"
         log_json "code_audit_violation" "$violation"

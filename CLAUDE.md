@@ -98,7 +98,7 @@ Compare results using `scripts/compare-programs.sh` after running A/B experiment
 
 ---
 
-## Standard Operational Profile (v0.6.1, 2026-03-14)
+## Standard Operational Profile (v0.7.1, 2026-03-20)
 
 Validated across 8+ experiments. Use these settings for new product runs.
 
@@ -111,9 +111,21 @@ max_discards_in_a_row: 3
 min_improvement_delta: 0.01
 max_plateau_loops: 2
 ```
+
+### Eval Weights (v0.7.1 — quality focus)
+```
+tests: 0.30
+lint: 0.15
+typecheck: 0.10
+coverage: 0.15    # ↑ from 0.05 — now measured via pytest --cov
+security: 0.05
+feature_coverage: 0.25  # ↑ from 0.20
+```
+
 Arena Contract **must** include:
 - Ledger-reading as first rule (read EVALS/ledger.jsonl before planning)
 - baseline-pinned feature_coverage (SCAFFOLD generates EVALS/features-baseline.json)
+- Quality Requirements: edge-case tests, input validation, modular code, pytest-cov, DB indexes
 
 ### Experimental (A/B comparison only)
 ```
