@@ -47,12 +47,12 @@ make_ws() {
     cat > "$ws/PROGRAM.md" <<'MDEOF'
 ## Eval Protocol
 weights:
-  tests: 0.35
-  lint: 0.20
-  typecheck: 0.15
-  coverage: 0.05
+  tests: 0.30
+  lint: 0.15
+  typecheck: 0.10
+  coverage: 0.15
   security: 0.05
-  feature_coverage: 0.20
+  feature_coverage: 0.25
 MDEOF
     echo "$ws"
 }
@@ -208,7 +208,7 @@ s9="$(score_of "$ws_t9")"
 check "$s9" "0.9500" "T9: security-fail → composite score 0.9500"
 
 # T10: lint-only pass, no FEATURES.md → feature_coverage=1.0, score 0.4000
-# (lint=0.20 + feature_coverage=0.20*1.0 = 0.40)
+# (lint=0.15 + feature_coverage=0.25*1.0 = 0.40)
 ws_t10="$(make_ws "t10")"
 put_eval "$ws_t10" unit false
 put_eval "$ws_t10" lint true
@@ -227,7 +227,7 @@ put_eval "$ws_t11" typecheck true
 printf '{"type":"security-scan","pass":true,"summary":"ok\x01bad","details":{},"duration_sec":1}\n' \
     > "$ws_t11/EVALS/security-scan-20260311-010101.json"
 s11="$(score_of "$ws_t11")"
-# With corrupt JSON: jq fails → score_security=0 → 0.45+0.25+0.20+0.05=0.9500
+# With corrupt JSON: jq fails → score_security=0 → 0.30+0.15+0.10+0.15+0.25=0.9500
 # With valid JSON:  jq works → score_security=1 → 1.0000
 # The point: our write_eval_result FIX ensures files are NEVER corrupt
 # This test just confirms current behavior — corrupt JSON from old code loses security weight
@@ -292,8 +292,8 @@ fi
 echo ""
 echo "=== feature_coverage: FEATURES.md progress score ==="
 
-# T17: 0/6 features done, all evals pass → feature_coverage=0 → score 0.8000
-# (tests=0.35 + lint=0.20 + typecheck=0.15 + coverage=0.05 + security=0.05 + fc=0.20*0 = 0.80)
+# T17: 0/6 features done, all evals pass → feature_coverage=0 → score 0.7500
+# (tests=0.30 + lint=0.15 + typecheck=0.10 + coverage=0.15 + security=0.05 + fc=0.25*0 = 0.75)
 ws_t17="$(make_ws "t17")"
 put_eval "$ws_t17" unit true
 put_eval "$ws_t17" lint true
@@ -301,10 +301,10 @@ put_eval "$ws_t17" typecheck true
 put_eval "$ws_t17" security-scan true
 put_features "$ws_t17" 6 0
 s17="$(score_of "$ws_t17")"
-check "$s17" "0.8000" "T17: 0/6 features done, all evals pass → 0.8000"
+check "$s17" "0.7500" "T17: 0/6 features done, all evals pass → 0.7500"
 
-# T18: 3/6 features done, all evals pass → feature_coverage=0.5 → score 0.9000
-# (0.80 + 0.20*0.5 = 0.90)
+# T18: 3/6 features done, all evals pass → feature_coverage=0.5 → score 0.8750
+# (0.75 + 0.25*0.5 = 0.875)
 ws_t18="$(make_ws "t18")"
 put_eval "$ws_t18" unit true
 put_eval "$ws_t18" lint true
@@ -312,7 +312,7 @@ put_eval "$ws_t18" typecheck true
 put_eval "$ws_t18" security-scan true
 put_features "$ws_t18" 6 3
 s18="$(score_of "$ws_t18")"
-check "$s18" "0.9000" "T18: 3/6 features done, all evals pass → 0.9000"
+check "$s18" "0.8750" "T18: 3/6 features done, all evals pass → 0.8750"
 
 # T19: 6/6 features done, all evals pass → feature_coverage=1.0 → score 1.0000
 ws_t19="$(make_ws "t19")"
@@ -387,8 +387,8 @@ put_features "$ws_t21" 15 11
 } > "$ws_t21/FEATURES.md"
 put_baseline "$ws_t21" "F-001" "F-002" "F-003" "F-004" "F-005" "F-006" "F-007"
 s21="$(score_of "$ws_t21")"
-# fc = 3/7 = 0.4286; score = 0.80 + 0.20*0.4286 = 0.8857
-check "$s21" "0.8857" "T21: baseline=7, 3/7 baseline done, extras ignored → score 0.8857"
+# fc = 3/7 = 0.4286; score = 0.75 + 0.25*0.4286 = 0.8571
+check "$s21" "0.8571" "T21: baseline=7, 3/7 baseline done, extras ignored → score 0.8571"
 
 # T22: no baseline file (legacy mode) → uses current FEATURES.md as denominator
 ws_t22="$(make_ws "t22")"
@@ -400,8 +400,8 @@ put_features "$ws_t22" 6 3
 # Explicitly ensure NO baseline file
 rm -f "$ws_t22/EVALS/features-baseline.json" 2>/dev/null || true
 s22="$(score_of "$ws_t22")"
-# Legacy: 3/6 = 0.5; score = 0.80 + 0.20*0.5 = 0.9000
-check "$s22" "0.9000" "T22: no baseline (legacy mode) → uses FEATURES.md denominator → 0.9000"
+# Legacy: 3/6 = 0.5; score = 0.75 + 0.25*0.5 = 0.8750
+check "$s22" "0.8750" "T22: no baseline (legacy mode) → uses FEATURES.md denominator → 0.8750"
 
 # T23: baseline exists but FEATURES.md absent → returns 1 (backward compat)
 ws_t23="$(make_ws "t23")"
@@ -413,6 +413,193 @@ put_baseline "$ws_t23" "F-001" "F-002" "F-003"
 rm -f "$ws_t23/FEATURES.md" 2>/dev/null || true
 s23="$(score_of "$ws_t23")"
 check "$s23" "1.0000" "T23: baseline exists but no FEATURES.md → fc=1 (backward compat) → 1.0000"
+
+# ===========================================================================
+# Measured coverage_pct → composite score (quality-first evaluator v0.7.1)
+# ===========================================================================
+echo ""
+echo "=== coverage_pct: actual test coverage affects composite score ==="
+
+# Helper: create unit eval result with coverage_pct in details
+put_eval_with_cov() {
+    local ws="$1" pass_val="$2" cov_pct="$3"
+    printf '{"type":"unit","timestamp":"2026-03-20T01:01:01Z","pass":%s,"summary":"ok","details":{"exit_code":0,"coverage_pct":%s},"duration_sec":1}\n' \
+        "$pass_val" "$cov_pct" > "$ws/EVALS/unit-20260320-010101.json"
+}
+
+# T24: coverage_pct=40, all evals pass, no FEATURES.md → fc=1
+# coverage saturates at 80%: score_coverage = 40/80 = 0.5
+# score = 0.30 + 0.15 + 0.10 + 0.15*0.50 + 0.05 + 0.25 = 0.9250
+ws_t24="$(make_ws "t24")"
+put_eval_with_cov "$ws_t24" true 40
+put_eval "$ws_t24" lint true
+put_eval "$ws_t24" typecheck true
+put_eval "$ws_t24" security-scan true
+s24="$(score_of "$ws_t24")"
+check "$s24" "0.9250" "T24: coverage_pct=40 → 40/80=0.5 → score 0.9250"
+
+# T25: coverage_pct=80, all evals pass, no FEATURES.md → fc=1
+# coverage saturated: score_coverage = 1.0
+# score = 0.30 + 0.15 + 0.10 + 0.15*1.0 + 0.05 + 0.25 = 1.0000
+ws_t25="$(make_ws "t25")"
+put_eval_with_cov "$ws_t25" true 80
+put_eval "$ws_t25" lint true
+put_eval "$ws_t25" typecheck true
+put_eval "$ws_t25" security-scan true
+s25="$(score_of "$ws_t25")"
+check "$s25" "1.0000" "T25: coverage_pct=80 → saturated → score 1.0000"
+
+# T26: verify delta between T24(40%) and T25(80%) = coverage_weight * (1.0 - 0.5) = 0.15 * 0.5 = 0.075
+delta_24_25=$(awk "BEGIN { printf \"%.4f\", $s25 - $s24 }")
+check "$delta_24_25" "0.0750" "T26: score delta(80%-40%) = 0.0750 = weight(0.15) * 0.50"
+
+# T27: coverage_pct=100, all pass, no FEATURES.md → still 1.0000 (saturated same as 80%)
+ws_t27="$(make_ws "t27")"
+put_eval_with_cov "$ws_t27" true 100
+put_eval "$ws_t27" lint true
+put_eval "$ws_t27" typecheck true
+put_eval "$ws_t27" security-scan true
+s27="$(score_of "$ws_t27")"
+check "$s27" "1.0000" "T27: coverage_pct=100 → saturated → score 1.0000"
+
+# T28: coverage_pct=40, 4/8 features done → fc=0.5, coverage=40/80=0.5
+# score = 0.30 + 0.15 + 0.10 + 0.15*0.50 + 0.05 + 0.25*0.5
+#       = 0.30 + 0.15 + 0.10 + 0.075 + 0.05 + 0.125 = 0.8000
+ws_t28="$(make_ws "t28")"
+put_eval_with_cov "$ws_t28" true 40
+put_eval "$ws_t28" lint true
+put_eval "$ws_t28" typecheck true
+put_eval "$ws_t28" security-scan true
+put_features "$ws_t28" 8 4
+s28="$(score_of "$ws_t28")"
+check "$s28" "0.8000" "T28: coverage_pct=40 + 4/8 features → both partial → score 0.8000"
+
+# T29: Windows backslash in summary → JSON stays parseable (evaluator integrity fix)
+# pytest --cov output contains "src\expense\main.py" which has invalid JSON escapes (\e, \m)
+ws_t29="$(make_ws "t29")"
+put_eval "$ws_t29" lint true
+put_eval "$ws_t29" typecheck true
+put_eval "$ws_t29" security-scan true
+# Write unit eval with backslash in summary (simulates Windows pytest --cov output)
+printf '{"type":"unit","timestamp":"2026-03-20T01:01:01Z","pass":true,"summary":"ok","details":{"exit_code":0,"coverage_pct":85},"duration_sec":1}\n' \
+    > "$ws_t29/EVALS/unit-20260320-010101.json"
+# Now run the actual write_eval_result via a mini eval to test backslash escaping
+# Simpler: just verify that write_eval_result escapes backslashes by running lint eval
+# with a crafted workspace that will produce backslash-free output, then manually test the sanitizer
+backslash_input='src\expense\main.py 99%'
+backslash_clean=$(echo "$backslash_input" | tr -d '\000-\010\013-\037' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
+test_json_bs="{\"summary\":\"${backslash_clean}\"}"
+if echo "$test_json_bs" | PATH="$HOME/bin:$PATH" jq . > /dev/null 2>&1; then
+    ok "T29: backslash in summary (Windows path) → escaped → jq parses valid JSON"
+else
+    ng "T29: backslash in summary breaks JSON (Windows pytest --cov regression)"
+fi
+
+# ===========================================================================
+# Coverage threshold: saturate at 80% (quality-first evaluator v0.7.1)
+# ===========================================================================
+echo ""
+echo "=== coverage threshold: 80% saturation ==="
+
+# T30: coverage_pct=79 → below threshold → score_coverage = 79/80 = 0.9875
+# all evals pass, no FEATURES.md → fc=1
+# score = 0.30 + 0.15 + 0.10 + 0.15*0.9875 + 0.05 + 0.25 = 0.9981
+ws_t30="$(make_ws "t30")"
+put_eval_with_cov "$ws_t30" true 79
+put_eval "$ws_t30" lint true
+put_eval "$ws_t30" typecheck true
+put_eval "$ws_t30" security-scan true
+s30="$(score_of "$ws_t30")"
+check "$s30" "0.9981" "T30: coverage_pct=79 → below 80% threshold → score 0.9981"
+
+# T31: coverage_pct=80 → at threshold → score_coverage = 1.0 (saturated)
+# score = 0.30 + 0.15 + 0.10 + 0.15*1.0 + 0.05 + 0.25 = 1.0000
+ws_t31="$(make_ws "t31")"
+put_eval_with_cov "$ws_t31" true 80
+put_eval "$ws_t31" lint true
+put_eval "$ws_t31" typecheck true
+put_eval "$ws_t31" security-scan true
+s31="$(score_of "$ws_t31")"
+check "$s31" "1.0000" "T31: coverage_pct=80 → at threshold → coverage saturated → score 1.0000"
+
+# T32: coverage_pct=90 → above threshold → still 1.0 (no difference from 80%)
+# score = 1.0000 (same as T31)
+ws_t32="$(make_ws "t32")"
+put_eval_with_cov "$ws_t32" true 90
+put_eval "$ws_t32" lint true
+put_eval "$ws_t32" typecheck true
+put_eval "$ws_t32" security-scan true
+s32="$(score_of "$ws_t32")"
+check "$s32" "1.0000" "T32: coverage_pct=90 → above 80% threshold → still saturated → score 1.0000"
+
+# T33: verify 80% and 90% produce same score (saturation works)
+delta_31_32=$(awk "BEGIN { printf \"%.4f\", $s32 - $s31 }")
+check "$delta_31_32" "0.0000" "T33: delta(90%-80%) = 0.0000 (both saturated at 1.0)"
+
+# ===========================================================================
+# Structure gate: monolith detection (extracted from CODE_AUDIT in run-job.sh)
+# ===========================================================================
+echo ""
+echo "=== structure gate: monolith detection ==="
+
+# Helper: check structure gate logic (same as in run-job.sh state_code_audit)
+check_structure_gate() {
+    local workspace="$1"
+    local src_dir="$workspace/src"
+    if [[ ! -d "$src_dir" ]]; then echo "skip"; return; fi
+    local pkg_dir
+    pkg_dir=$(find "$src_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1)
+    if [[ -z "$pkg_dir" ]]; then echo "skip"; return; fi
+    local impl_files impl_count total_loc
+    impl_files=$(find "$pkg_dir" -maxdepth 1 -name '*.py' ! -name '__init__.py' -type f 2>/dev/null)
+    impl_count=$(echo "$impl_files" | grep -c '\.py$' 2>/dev/null || echo 0)
+    total_loc=0
+    if [[ -n "$impl_files" ]]; then
+        total_loc=$(cat $impl_files 2>/dev/null | wc -l | tr -d ' ')
+    fi
+    if [[ "$total_loc" -gt 150 && "$impl_count" -lt 2 ]]; then
+        echo "fail:${total_loc}loc_${impl_count}files"
+    else
+        echo "pass:${total_loc}loc_${impl_count}files"
+    fi
+}
+
+# T34: 200-line single file → structure gate FAIL
+ws_t34="$WORK/t34"
+mkdir -p "$ws_t34/src/mypkg"
+touch "$ws_t34/src/mypkg/__init__.py"
+{ for i in $(seq 1 200); do echo "def func_${i}(): return ${i}"; done; } > "$ws_t34/src/mypkg/main.py"
+result_t34=$(check_structure_gate "$ws_t34")
+if [[ "$result_t34" == fail:* ]]; then
+    ok "T34: 200-line monolith (1 file) → structure gate FAIL ($result_t34)"
+else
+    ng "T34: 200-line monolith should fail gate (got: $result_t34)"
+fi
+
+# T35: 200 lines split across 2 files → structure gate PASS
+ws_t35="$WORK/t35"
+mkdir -p "$ws_t35/src/mypkg"
+touch "$ws_t35/src/mypkg/__init__.py"
+{ for i in $(seq 1 100); do echo "def func_${i}(): return ${i}"; done; } > "$ws_t35/src/mypkg/main.py"
+{ for i in $(seq 101 200); do echo "def func_${i}(): return ${i}"; done; } > "$ws_t35/src/mypkg/db.py"
+result_t35=$(check_structure_gate "$ws_t35")
+if [[ "$result_t35" == pass:* ]]; then
+    ok "T35: 200 lines across 2 files → structure gate PASS ($result_t35)"
+else
+    ng "T35: 200 lines in 2 files should pass gate (got: $result_t35)"
+fi
+
+# T36: 100-line single file → below threshold → structure gate PASS
+ws_t36="$WORK/t36"
+mkdir -p "$ws_t36/src/mypkg"
+touch "$ws_t36/src/mypkg/__init__.py"
+{ for i in $(seq 1 100); do echo "def func_${i}(): return ${i}"; done; } > "$ws_t36/src/mypkg/main.py"
+result_t36=$(check_structure_gate "$ws_t36")
+if [[ "$result_t36" == pass:* ]]; then
+    ok "T36: 100-line single file → below 150 threshold → PASS ($result_t36)"
+else
+    ng "T36: 100-line single file should pass gate (got: $result_t36)"
+fi
 
 # ===========================================================================
 # Summary

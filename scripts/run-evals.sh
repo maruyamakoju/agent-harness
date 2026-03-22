@@ -54,7 +54,7 @@ write_eval_result() {
     local result_file="${EVALS_DIR}/${etype}-${TS_SLUG}.json"
     # Strip control characters and escape quotes for valid JSON string
     local clean_summary
-    clean_summary=$(echo "$summary" | tr -d '\000-\010\013-\037' | sed 's/"/\\"/g' | tr '\n' ' ')
+    clean_summary=$(echo "$summary" | tr -d '\000-\010\013-\037' | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
     cat > "$result_file" <<EVALEOF
 {"type":"${etype}","timestamp":"${TIMESTAMP}","pass":${passed},"summary":"${clean_summary}","details":${details},"duration_sec":${duration}}
 EVALEOF
@@ -70,10 +70,22 @@ run_unit_tests() {
     start_time=$(date +%s)
     local output="" exit_code=0
 
+    local cov_pct=""
+
     if [[ -f "package.json" ]] && grep -q '"test"' package.json 2>/dev/null; then
         output=$(npm test 2>&1 | tail -50) || exit_code=$?
     elif [[ -f "pyproject.toml" ]] || [[ -f "setup.py" ]] || [[ -f "pytest.ini" ]]; then
-        output=$(python -m pytest --tb=short -q 2>&1 | tail -50) || exit_code=$?
+        # Try with --cov for actual coverage measurement; fall back to plain pytest
+        local cov_target="."
+        [[ -d "src" ]] && cov_target="src"
+        if python -m pytest --co -q --cov="$cov_target" > /dev/null 2>&1; then
+            output=$(python -m pytest --tb=short -q --cov="$cov_target" --cov-report=term 2>&1 | tail -80) || exit_code=$?
+            # Parse coverage percentage from "TOTAL ... NN%" line
+            cov_pct=$(echo "$output" | grep -E '^TOTAL\s' | grep -oE '[0-9]+%' | tr -d '%' || true)
+        else
+            echo "[eval] pytest-cov not available, running without coverage"
+            output=$(python -m pytest --tb=short -q 2>&1 | tail -50) || exit_code=$?
+        fi
     elif [[ -f "Cargo.toml" ]]; then
         output=$(cargo test 2>&1 | tail -50) || exit_code=$?
     elif [[ -f "go.mod" ]]; then
@@ -90,7 +102,16 @@ run_unit_tests() {
     local summary
     summary=$(echo "$output" | tail -5 | tr '\n' ' ' | head -c 200)
 
-    write_eval_result "unit" "$passed" "$summary" "$duration" '{"exit_code": '"$exit_code"'}'
+    # Build details JSON with optional coverage_pct
+    local details_json
+    if [[ -n "$cov_pct" && "$cov_pct" =~ ^[0-9]+$ ]]; then
+        details_json="{\"exit_code\": $exit_code, \"coverage_pct\": $cov_pct}"
+        echo "[eval] Coverage measured: ${cov_pct}%"
+    else
+        details_json="{\"exit_code\": $exit_code}"
+    fi
+
+    write_eval_result "unit" "$passed" "$summary" "$duration" "$details_json"
 }
 
 # ---------------------------------------------------------------------------
@@ -289,7 +310,7 @@ compute_composite_score() {
     local evals_dir="$WORKSPACE/EVALS"
 
     # Default weights (sum = 1.0)
-    local w_tests=0.35 w_lint=0.20 w_typecheck=0.15 w_coverage=0.05 w_security=0.05 w_feature_coverage=0.20
+    local w_tests=0.30 w_lint=0.15 w_typecheck=0.10 w_coverage=0.15 w_security=0.05 w_feature_coverage=0.25
 
     # Try reading weights from PROGRAM.md
     if [[ -f "$WORKSPACE/PROGRAM.md" ]]; then
@@ -337,7 +358,8 @@ compute_composite_score() {
         local cov_pct
         cov_pct=$(jq -r '.details.coverage_pct // empty' "$latest_unit" 2>/dev/null || true)
         if [[ -n "$cov_pct" ]]; then
-            score_coverage=$(awk "BEGIN {printf \"%.4f\", $cov_pct / 100}")
+            # Saturate at 80%: ≥80% → 1.0, below → linear (cov_pct / 80)
+            score_coverage=$(awk "BEGIN {v = $cov_pct / 80.0; if (v > 1) v = 1; printf \"%.4f\", v}")
         else
             # If tests pass, assume baseline coverage
             [[ "$score_tests" -eq 1 ]] && score_coverage=1

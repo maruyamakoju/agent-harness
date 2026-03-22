@@ -329,11 +329,34 @@ before stopping. Evaluator integrity fix (permitted under freeze).
 
 ---
 
+### Round 24: Quality-First Gates + expense-002 Canary (2026-03-20) — COMPLETE
+
+#### Changes (7ac836b)
+- [x] Coverage saturation at 80% — `coverage_pct >= 80` → score 1.0 (eliminates 100% requirement)
+- [x] Windows backslash fix — `src\expense\main.py` in eval JSON no longer corrupts jq parsing
+- [x] Python structure gate — CODE_AUDIT rejects single-file monoliths (> 150 LOC)
+- [x] Eval weight rebalance (v0.7.1): coverage 0.05 → 0.15 (pytest --cov measured)
+- [x] Regression tests T24-T36 (coverage saturation, backslash escape, structure gate)
+
+#### expense-002 Canary Results
+- Product: Expense Tracker CLI (same spec as expense-001)
+- 6 loops / 4 KEEP / 2 discard_audit / score 1.0000
+- DiscrRecovery: 1.0000
+- Quality gate checklist: 6/6 PASS
+  - coverage_pct=90%, modular split (db.py 147 + main.py 153), 5 edge-case tests
+  - Input validation on all commands, 2 DB indexes
+- Artifact: `logs/expense-002-observation.md`
+
+#### Tests
+- 36 eval regression + 75 E2E assertions + 220 dashboard = 331 tests pass
+
+---
+
 ### Metrics (cumulative)
-- Tests: 220 dashboard + 23 eval regression + E2E
+- Tests: 220 dashboard + 36 eval regression + 75 E2E = 331 total
 - Coverage: 84%
 - PRs merged: #1-#24 + direct pushes
 - Stop conditions validated: plateau_stop, consecutive_discard_stop, target_score_reached, max_loops_reached
-- Products validated: TaskForge CLI, FastAPI Notes API, Bookmark Manager CLI, API Cost Tracker CLI, API Cost Tracker HTTP API, Daily Habit Tracker CLI, Daily Standup Logger CLI
-- Standard profile (v0.6.1 → v0.6.2): diff_lines=200 confirmed, premature stop fix applied
-- Production use phase: standup at 0.85 (8/8 features), costctl at 0.925 (6/8 features)
+- Products validated: TaskForge CLI, FastAPI Notes API, Bookmark Manager CLI, API Cost Tracker CLI, API Cost Tracker HTTP API, Daily Habit Tracker CLI, Daily Standup Logger CLI, Expense Tracker CLI
+- Standard profile (v0.6.1 → v0.7.1): coverage saturation, structure gate, backslash fix
+- Production use phase: standup (12 features), costctl (8 features), ttrack (8 features)
