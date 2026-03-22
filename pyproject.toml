@@ -1,0 +1,32 @@
+[project]
+name = "product-forge"
+version = "0.8.0"
+description = "Autonomous product builder with quality-gated evaluation loops"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "typer[all]>=0.9",
+    "rich>=13.0",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "ruff", "mypy"]
+
+[project.scripts]
+forge = "forge.cli:app"
+
+[tool.ruff]
+line-length = 99
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.mypy]
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests/forge"]
+pythonpath = ["."]
