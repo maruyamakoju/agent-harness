@@ -1,0 +1,28 @@
+{
+  "id": "costctl-004",
+  "repo": "local://continue",
+  "continue_from": "costctl-003",
+  "base_ref": "main",
+  "work_branch": "forge/costctl-004",
+  "task": "Complete the API Cost Tracker CLI by implementing the remaining 2 features.\nThis is a continuation from costctl-003 which completed F-001..F-006.\n\nFeatures to implement:\n\nF-007: Forecast — `costctl forecast [--days N]`\n  Calculate rolling daily average cost over the last N days (default: 30).\n  Project weekly and monthly costs based on the average.\n  Requires at least 2 days of data; print warning if insufficient.\n  Output: rich Table showing daily avg, weekly projected, monthly projected.\n  Tests: forecast with sample data, insufficient data warning, --days override.\n\nF-008: Export — `costctl export [--format json|csv] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--output FILE]`\n  Export filtered usage entries.\n  json: JSON array of objects with all fields.\n  csv: CSV with header row.\n  Default format: json. Default output: stdout. --output writes to file.\n  Tests: JSON schema correct, CSV has headers, file output, filtered export.\n\nIMPORTANT: Do NOT modify features F-001..F-006. They are done.\nDo NOT rewrite existing source code. Only ADD new code.\nRead FEATURES.md for the authoritative feature list.\n",
+  "time_budget_sec": 14400,
+  "mode": "product",
+  "product_name": "API Cost Tracker CLI",
+  "max_loops": 8,
+  "new_features": "",
+  "commands": {
+    "continue_setup": [],
+    "test": [
+      "python -m pytest tests/ -v --tb=short",
+      "python -m ruff check .",
+      "python -m mypy src/ --ignore-missing-imports"
+    ]
+  },
+  "program_md": "# PROGRAM.md — API Cost Tracker CLI (costctl-004, continuation)\n\n## Product: API Cost Tracker CLI\n\n## Objective\n\nComplete the costctl CLI from costctl-003 with 2 remaining features (F-007, F-008).\nMaximize composite quality score through hypothesis-driven mutations.\n\n## Mutation Scope\n\n- Max files changed per loop: 3\n- Max files created per loop: 2\n- Max diff lines per loop: 200\n- Max endpoint/route changes per loop: 1\n\n## Eval Protocol\n\nweights:\n  tests: 0.35\n  lint: 0.20\n  typecheck: 0.15\n  coverage: 0.05\n  security: 0.05\n  feature_coverage: 0.20\n\n## Keep/Discard Policy\n\n- keep_threshold: score_after > score_before\n- tie_policy: discard\n\n## Budget\n\n- max_loops: 8\n- max_wall_seconds: 14400\n- max_discards_in_a_row: 3\n\n## Stop Conditions\n\n- target_score: 1.00\n- min_improvement_delta: 0.005\n- max_plateau_loops: 3\n- consecutive_discards >= max_discards_in_a_row\n\n## Hypothesis Sources\n\n- FEATURES.md, eval failures, coverage gaps, EVALS/ledger.jsonl\n\n## Arena Contract\n\n- **FIRST: Read EVALS/ledger.jsonl before choosing your hypothesis.**\n  Find the most recent entry. Check the \"verdict\" field.\n  If verdict was \"discard_audit\", your next hypothesis MUST reduce scope (fewer files).\n  If verdict was \"discard_regression\", check which tests broke and fix in same loop.\n  Write your hypothesis as: \"Last verdict: <verdict> | Response: <your adaptation>\"\n- This is a CONTINUATION run. Features F-001..F-006 are DONE. Do NOT modify them.\n- Choose exactly one remaining feature (F-007 or F-008) or one blocking defect per loop.\n- Before making changes, search the codebase. Do not assume missing implementation.\n- Do not create scratch, debug, or temp files.\n- Do not edit scoring files, eval scripts, or EVALS/features-baseline.json.\n- Do not add, remove, reorder, or split features in FEATURES.md.\n- Run the smallest relevant test first, then full eval.\n- Update FEATURES.md status only for the feature you implemented.\n- KEEP only if score improves and audit passes.\n- If tests break, fix them in the SAME loop before moving on.\n- Prefer depth (thorough tests for one feature) over breadth.\n- IMPORTANT: costctl-003 had 3 consecutive discard_regression loops on F-006/F-007.\n  The issue was test regressions. Be careful to not break existing tests.\n  Run existing tests FIRST before adding new code.\n",
+  "agent_pid": 48646,
+  "current_day": 0,
+  "loop_count": 2,
+  "last_state": "DONE",
+  "last_state_ts": "2026-03-18T02:57:01Z",
+  "consecutive_discards": 0
+}
